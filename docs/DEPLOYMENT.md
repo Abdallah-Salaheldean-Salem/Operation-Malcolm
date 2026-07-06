@@ -13,3 +13,11 @@ This guide explains how to deploy the application.
 
 ## Hosting
 The application is a standard static SPA (Single Page Application) and can be hosted on any static hosting provider like Vercel, Netlify, GitHub Pages, or Firebase Hosting.
+
+## Environment Variables
+The app persists workspace data to Supabase. Set these in your hosting provider (e.g. Vercel project settings):
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+See `.env.example` for the current project's values. These are safe to expose client-side; access is governed by the `projects` table's row-level security policy.

@@ -11,7 +11,8 @@ import ActivityView from "./components/ActivityView";
 import CalendarView from "./components/CalendarView";
 import SettingsView from "./components/SettingsView";
 import TaskModal from "./components/TaskModal";
-import { 
+import { fetchProjects, saveProject, deleteProjectRemote } from "./lib/supabase-sync";
+import {
   LayoutGrid, 
   Undo2, 
   Redo2, 
@@ -100,6 +101,35 @@ export default function App() {
     localStorage.setItem("clickup_active_view", activeView);
   }, [activeView]);
 
+  // Load workspace from Supabase on first mount, seeding it if empty.
+  // localStorage stays as the fast/offline cache; Supabase becomes the source of truth once loaded.
+  const [hasLoadedRemote, setHasLoadedRemote] = useState(false);
+  useEffect(() => {
+    fetchProjects().then((remoteProjects) => {
+      if (remoteProjects === null) {
+        // Supabase unreachable/misconfigured; keep working off localStorage.
+        return;
+      }
+      if (remoteProjects.length > 0) {
+        setProjects(remoteProjects);
+        setActiveProjectId((prev) =>
+          remoteProjects.some((p) => p.id === prev) ? prev : remoteProjects[0].id
+        );
+      } else {
+        // Table is empty (first run) - seed it with the current workspace.
+        projects.forEach((p) => saveProject(p));
+      }
+      setHasLoadedRemote(true);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Push project changes to Supabase (skip until the initial remote load/seed completes).
+  useEffect(() => {
+    if (!hasLoadedRemote) return;
+    projects.forEach((p) => saveProject(p));
+  }, [projects, hasLoadedRemote]);
+
   // Active Project Selection
   const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
 
@@ -150,6 +180,7 @@ export default function App() {
     const remaining = projects.filter((p) => p.id !== id);
     setProjects(remaining);
     setActiveProjectId(remaining[0].id);
+    deleteProjectRemote(id);
   };
 
   // Update current project (With automatic Undo history pushing!)
