@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Project, Task } from "../types";
 import { fetchAppState, saveAppState } from "../lib/supabase-sync";
-import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight } from "lucide-react";
+import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic } from "lucide-react";
 
 interface ActivityViewProps {
   project: Project;
@@ -105,6 +105,81 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
     }, 600);
     return () => clearTimeout(timer);
   }, [logs, logsSyncReady]);
+
+  // --- Voice dictation (Web Speech API) ---
+  // Dictate into the task title / notes fields. Uses the browser's built-in
+  // speech recognition (Chrome, Edge, Safari incl. iOS/Android); the mic
+  // buttons are hidden on browsers without support. Recognition language
+  // follows the device language, so Arabic phones dictate in Arabic.
+  const SpeechRecognitionImpl =
+    typeof window !== "undefined"
+      ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      : undefined;
+  const voiceSupported = Boolean(SpeechRecognitionImpl);
+
+  const [listeningField, setListeningField] = useState<"title" | "notes" | null>(null);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
+
+  const startVoice = (field: "title" | "notes") => {
+    if (!voiceSupported) return;
+    // Tapping the active mic again stops dictation.
+    if (listeningField === field) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    recognitionRef.current?.abort();
+
+    const setter = field === "title" ? setCompletedText : setAdditionalNotes;
+    const base = field === "title" ? completedText : additionalNotes;
+    const prefix = base && !base.endsWith(" ") ? base + " " : base;
+
+    const rec = new SpeechRecognitionImpl();
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = true; // live text while speaking
+    rec.continuous = false; // stops automatically after a pause
+
+    rec.onresult = (event: any) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setter(prefix + transcript);
+    };
+    rec.onerror = (event: any) => {
+      if (event.error === "aborted") return;
+      setVoiceError(
+        event.error === "not-allowed" || event.error === "service-not-allowed"
+          ? "Microphone access was denied — allow the microphone for this site and try again."
+          : `Voice input didn't work (${event.error}). Please try again.`
+      );
+    };
+    rec.onend = () => {
+      recognitionRef.current = null;
+      setListeningField(null);
+    };
+
+    recognitionRef.current = rec;
+    setVoiceError(null);
+    setListeningField(field);
+    try {
+      rec.start();
+    } catch {
+      recognitionRef.current = null;
+      setListeningField(null);
+    }
+  };
+
+  useEffect(() => {
+    return () => recognitionRef.current?.abort();
+  }, []);
+
+  const micButtonClass = (field: "title" | "notes") =>
+    `absolute right-2 p-1.5 rounded-lg transition-colors cursor-pointer ${
+      listeningField === field
+        ? "text-rose-500 bg-rose-500/10 animate-pulse"
+        : "text-slate-400 dark:text-slate-500 hover:text-indigo-500 hover:bg-indigo-500/10"
+    }`;
 
   // Form states
   const [targetDate, setTargetDate] = useState("2026-06-19");
@@ -342,6 +417,7 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
             <h3 className="text-sm font-bold text-slate-800 dark:text-white tracking-wide">Task Logger</h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
               Record daily team updates for Abdallah and Sallam with precise scheduling time.
+              {voiceSupported && " Tap a mic icon to dictate by voice."}
             </p>
           </div>
         </div>
@@ -393,14 +469,26 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
             <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               What did you complete? *
             </label>
-            <input
-              type="text"
-              required
-              value={completedText}
-              onChange={(e) => setCompletedText(e.target.value)}
-              placeholder="e.g. Verify database credentials"
-              className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-200 rounded-lg px-3 py-2 text-xs placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
-            />
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                required
+                value={completedText}
+                onChange={(e) => setCompletedText(e.target.value)}
+                placeholder={listeningField === "title" ? "Listening… speak now" : "e.g. Verify database credentials"}
+                className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-200 rounded-lg pl-3 pr-9 py-2 text-xs placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+              {voiceSupported && (
+                <button
+                  type="button"
+                  onClick={() => startVoice("title")}
+                  title={listeningField === "title" ? "Stop dictation" : "Dictate the task name"}
+                  className={`${micButtonClass("title")} top-1/2 -translate-y-1/2`}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Status & Who Completed It */}
@@ -475,13 +563,28 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
             <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Additional Notes
             </label>
-            <textarea
-              rows={3}
-              value={additionalNotes}
-              onChange={(e) => setAdditionalNotes(e.target.value)}
-              placeholder="Optional technical specifications or blockers..."
-              className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-200 rounded-lg px-3 py-2 text-xs placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-            />
+            <div className="relative">
+              <textarea
+                rows={3}
+                value={additionalNotes}
+                onChange={(e) => setAdditionalNotes(e.target.value)}
+                placeholder={listeningField === "notes" ? "Listening… speak now" : "Optional technical specifications or blockers..."}
+                className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-200 rounded-lg pl-3 pr-9 py-2 text-xs placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+              />
+              {voiceSupported && (
+                <button
+                  type="button"
+                  onClick={() => startVoice("notes")}
+                  title={listeningField === "notes" ? "Stop dictation" : "Dictate the notes / description"}
+                  className={`${micButtonClass("notes")} top-2`}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            {voiceError && (
+              <p className="text-[10px] text-rose-500 dark:text-rose-400 leading-relaxed">{voiceError}</p>
+            )}
           </div>
 
           {/* Action Buttons */}
