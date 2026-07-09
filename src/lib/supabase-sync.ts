@@ -3,7 +3,7 @@ import { Project } from '../types';
 
 // Only the fields that belong to the Project type — created_at/updated_at
 // stay in the database and never round-trip through app state.
-const PROJECT_COLUMNS = 'id,name,description,columns,tasks,tags,ideas,teams,members';
+const PROJECT_COLUMNS = 'id,name,description,columns,tasks,tags,ideas,teams,members,color,icon,archived';
 
 export async function fetchProjects(): Promise<Project[] | null> {
   if (!isSupabaseConfigured) return null;

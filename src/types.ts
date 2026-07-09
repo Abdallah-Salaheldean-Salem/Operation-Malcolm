@@ -79,6 +79,9 @@ export interface Project {
   ideas?: IdeaItem[];
   teams?: Team[];
   members?: TeamMember[];
+  color?: string;    // Space accent color (hex)
+  icon?: string;     // Space icon (emoji)
+  archived?: boolean; // Hidden from active lists but retained
 }
 
 export interface SuggestedAction {

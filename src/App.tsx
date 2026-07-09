@@ -36,6 +36,13 @@ import {
   Moon
 } from "lucide-react";
 
+// ClickUp-style Space accent colors offered in the sidebar picker.
+const SPACE_COLORS = [
+  "#6366f1", "#3b82f6", "#06b6d4", "#10b981",
+  "#f59e0b", "#f43f5e", "#ec4899", "#8b5cf6",
+];
+const SPACE_ICONS = ["🗂️", "🚀", "💡", "🛠️", "🎯", "🧪", "📦", "🌐", "⚙️", "🔬"];
+
 export default function App() {
   // Global States
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -193,8 +200,12 @@ export default function App() {
     localStorage.setItem("clickup_active_view", activeView);
   }, [activeView]);
 
-  // Active Project Selection
-  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
+  // Active Project Selection (archived spaces are hidden from active use)
+  const visibleProjects = projects.filter((p) => !p.archived);
+  const activeProject =
+    visibleProjects.find((p) => p.id === activeProjectId) ||
+    visibleProjects[0] ||
+    projects[0];
 
   const handleSelectProject = (id: string) => {
     setActiveProjectId(id);
@@ -211,6 +222,8 @@ export default function App() {
       id: `proj-${Date.now()}`,
       name,
       description: desc,
+      color: SPACE_COLORS[projects.length % SPACE_COLORS.length],
+      icon: SPACE_ICONS[projects.length % SPACE_ICONS.length],
       tags: ["Frontend", "Backend", "Design", "DevOps", "QA"],
       columns: [
         { id: "col-todo", title: "To Do", color: "#64748b" },
@@ -242,9 +255,56 @@ export default function App() {
 
     const remaining = projects.filter((p) => p.id !== id);
     setProjects(remaining);
-    setActiveProjectId(remaining[0].id);
+    if (activeProjectId === id) {
+      const nextActive = remaining.find((p) => !p.archived) || remaining[0];
+      setActiveProjectId(nextActive.id);
+    }
     lastSyncedRef.current.delete(id);
     deleteProjectRemote(id);
+  };
+
+  // Duplicate a Space (deep clone with a fresh id, ClickUp-style "(Copy)")
+  const handleDuplicateProject = (id: string) => {
+    const source = projects.find((p) => p.id === id);
+    if (!source) return;
+    setUndoStack((prev) => [...prev, projects]);
+    setRedoStack([]);
+
+    const clone: Project = {
+      ...JSON.parse(JSON.stringify(source)),
+      id: `proj-${Date.now()}`,
+      name: `${source.name} (Copy)`,
+      archived: false,
+    };
+    setProjects([...projects, clone]);
+    setActiveProjectId(clone.id);
+  };
+
+  // Archive a Space (soft-hide) instead of deleting it
+  const handleArchiveProject = (id: string) => {
+    const active = projects.filter((p) => !p.archived);
+    if (active.length <= 1 && active.some((p) => p.id === id)) return; // keep one active
+    setUndoStack((prev) => [...prev, projects]);
+    setRedoStack([]);
+
+    const updated = projects.map((p) => (p.id === id ? { ...p, archived: true } : p));
+    setProjects(updated);
+    if (activeProjectId === id) {
+      const nextActive = updated.find((p) => !p.archived);
+      if (nextActive) setActiveProjectId(nextActive.id);
+    }
+  };
+
+  const handleRestoreProject = (id: string) => {
+    setUndoStack((prev) => [...prev, projects]);
+    setRedoStack([]);
+    setProjects(projects.map((p) => (p.id === id ? { ...p, archived: false } : p)));
+    setActiveProjectId(id);
+  };
+
+  // Update a Space's color / icon
+  const handleUpdateSpaceMeta = (id: string, meta: { color?: string; icon?: string }) => {
+    setProjects(projects.map((p) => (p.id === id ? { ...p, ...meta } : p)));
   };
 
   // Update current project (With automatic Undo history pushing!)
@@ -443,6 +503,12 @@ export default function App() {
               }}
               onCreateProject={handleCreateProject}
               onDeleteProject={handleDeleteProject}
+              onDuplicateProject={handleDuplicateProject}
+              onArchiveProject={handleArchiveProject}
+              onRestoreProject={handleRestoreProject}
+              onUpdateSpaceMeta={handleUpdateSpaceMeta}
+              spaceColors={SPACE_COLORS}
+              spaceIcons={SPACE_ICONS}
               activeView={activeView}
               onSelectView={(view) => {
                 setActiveView(view);
@@ -475,13 +541,13 @@ export default function App() {
             {/* Workspace quick selector */}
             <div className="hidden md:flex items-center pl-4 border-l border-slate-200 dark:border-[#1E222B]">
               <select
-                value={activeProjectId}
+                value={activeProject?.id}
                 onChange={(e) => handleSelectProject(e.target.value)}
                 className="bg-transparent text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:text-white focus:outline-none cursor-pointer"
               >
-                {projects.map((proj) => (
+                {visibleProjects.map((proj) => (
                   <option key={proj.id} value={proj.id} className="bg-slate-100 dark:bg-[#0B0D11] text-slate-700 dark:text-slate-300">
-                    📂 {proj.name}
+                    {proj.icon || "📂"} {proj.name}
                   </option>
                 ))}
               </select>
@@ -556,8 +622,18 @@ export default function App() {
             
             {/* Title Block */}
             <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-                <Folder className="w-6 h-6 text-indigo-400 stroke-[1.5]" />
+              <div
+                className="w-12 h-12 rounded-xl border flex items-center justify-center text-2xl shrink-0"
+                style={{
+                  backgroundColor: `${activeProject?.color || "#4f46e5"}1a`,
+                  borderColor: `${activeProject?.color || "#4f46e5"}33`,
+                }}
+              >
+                {activeProject?.icon ? (
+                  <span>{activeProject.icon}</span>
+                ) : (
+                  <Folder className="w-6 h-6 stroke-[1.5]" style={{ color: activeProject?.color || "#818cf8" }} />
+                )}
               </div>
               <div className="space-y-0.5">
                 <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-2">

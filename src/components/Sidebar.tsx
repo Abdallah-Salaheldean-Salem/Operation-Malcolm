@@ -14,6 +14,11 @@ import {
   Lightbulb,
   Clock,
   Settings,
+  MoreHorizontal,
+  Copy,
+  Archive,
+  ArchiveRestore,
+  Palette,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -22,6 +27,12 @@ interface SidebarProps {
   onSelectProject: (id: string) => void;
   onCreateProject: (name: string, desc: string) => void;
   onDeleteProject: (id: string) => void;
+  onDuplicateProject?: (id: string) => void;
+  onArchiveProject?: (id: string) => void;
+  onRestoreProject?: (id: string) => void;
+  onUpdateSpaceMeta?: (id: string, meta: { color?: string; icon?: string }) => void;
+  spaceColors?: string[];
+  spaceIcons?: string[];
   activeView: AppView;
   onSelectView: (view: AppView) => void;
 }
@@ -32,6 +43,12 @@ export default function Sidebar({
   onSelectProject,
   onCreateProject,
   onDeleteProject,
+  onDuplicateProject,
+  onArchiveProject,
+  onRestoreProject,
+  onUpdateSpaceMeta,
+  spaceColors = [],
+  spaceIcons = [],
   activeView,
   onSelectView,
 }: SidebarProps) {
@@ -39,8 +56,12 @@ export default function Sidebar({
   const [newProjName, setNewProjName] = useState("");
   const [newProjDesc, setNewProjDesc] = useState("");
   const [projectsExpanded, setProjectsExpanded] = useState(true);
+  const [archivedExpanded, setArchivedExpanded] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const activeProject = projects.find((p) => p.id === activeProjectId);
+  const activeProjects = projects.filter((p) => !p.archived);
+  const archivedProjects = projects.filter((p) => p.archived);
 
   const viewItems: { id: AppView; label: string; icon: any; badge?: string }[] = [
     { id: "list", label: "1. List View", icon: ListTodo },
@@ -178,37 +199,178 @@ export default function Sidebar({
 
         {projectsExpanded && (
           <div id="projects-list" className="space-y-1">
-            {projects.map((proj) => {
+            {activeProjects.map((proj) => {
               const isSelected = proj.id === activeProjectId;
+              const isMenuOpen = menuOpenId === proj.id;
               return (
                 <div
                   key={proj.id}
                   id={`project-item-${proj.id}`}
-                  className={`group flex items-center justify-between rounded-lg transition-colors p-1 border ${
+                  className={`group relative flex items-center justify-between rounded-lg transition-colors p-1 border ${
                     isSelected ? "bg-slate-50 dark:bg-[#1C1F26] border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white" : "border-transparent hover:bg-slate-50 dark:hover:bg-[#1C1F26]/40"
                   }`}
                 >
                   <button
                     id={`select-project-${proj.id}`}
                     onClick={() => onSelectProject(proj.id)}
-                    className="flex-1 text-left flex items-center space-x-2.5 px-2 py-1.5 text-xs font-medium rounded-md truncate text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-white cursor-pointer"
+                    className="flex-1 min-w-0 text-left flex items-center space-x-2.5 px-2 py-1.5 text-xs font-medium rounded-md text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:text-white cursor-pointer"
                   >
-                    <FolderOpen className="w-3.5 h-3.5 flex-shrink-0 text-slate-500 dark:text-slate-400" />
+                    {proj.icon ? (
+                      <span className="w-3.5 text-center flex-shrink-0 text-[13px] leading-none">{proj.icon}</span>
+                    ) : (
+                      <FolderOpen
+                        className="w-3.5 h-3.5 flex-shrink-0"
+                        style={{ color: proj.color || undefined }}
+                      />
+                    )}
                     <span className="truncate">{proj.name}</span>
                   </button>
-                  {projects.length > 1 && (
-                    <button
-                      id={`delete-project-${proj.id}`}
-                      onClick={() => onDeleteProject(proj.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-400 rounded transition-opacity cursor-pointer"
-                      title="Delete Space"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+
+                  <button
+                    id={`space-menu-btn-${proj.id}`}
+                    onClick={() => setMenuOpenId(isMenuOpen ? null : proj.id)}
+                    className={`p-1 rounded hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer ${
+                      isMenuOpen ? "opacity-100 text-slate-900 dark:text-white" : "opacity-0 group-hover:opacity-100 text-slate-500 dark:text-slate-400"
+                    }`}
+                    title="Manage Space"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                  </button>
+
+                  {isMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setMenuOpenId(null)} aria-hidden="true" />
+                      <div
+                        id={`space-menu-${proj.id}`}
+                        className="absolute right-1 top-8 z-40 w-52 bg-white dark:bg-[#17191E] border border-slate-200 dark:border-slate-800 rounded-lg shadow-2xl py-1.5 text-xs text-left"
+                      >
+                        {/* Color & Icon */}
+                        <div className="px-3 py-1.5">
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-1.5 flex items-center space-x-1">
+                            <Palette className="w-3 h-3" />
+                            <span>Color &amp; Icon</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {spaceColors.map((color) => (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => onUpdateSpaceMeta?.(proj.id, { color })}
+                                className={`w-4 h-4 rounded-full border cursor-pointer transition-transform hover:scale-110 ${
+                                  proj.color === color ? "ring-2 ring-offset-1 ring-offset-white dark:ring-offset-[#17191E] ring-slate-400" : "border-slate-300 dark:border-slate-700"
+                                }`}
+                                style={{ backgroundColor: color }}
+                                title={color}
+                              />
+                            ))}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {spaceIcons.map((icon) => (
+                              <button
+                                key={icon}
+                                type="button"
+                                onClick={() => onUpdateSpaceMeta?.(proj.id, { icon })}
+                                className={`w-6 h-6 rounded-md flex items-center justify-center text-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                                  proj.icon === icon ? "bg-indigo-500/15 ring-1 ring-indigo-500/40" : ""
+                                }`}
+                                title={`Use ${icon}`}
+                              >
+                                {icon}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-200 dark:border-slate-800 my-1" />
+
+                        {onDuplicateProject && (
+                          <button
+                            id={`duplicate-space-${proj.id}`}
+                            onClick={() => { onDuplicateProject(proj.id); setMenuOpenId(null); }}
+                            className="w-full px-3 py-1.5 flex items-center space-x-2 hover:bg-slate-50 dark:hover:bg-[#1C1F26] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Duplicate Space</span>
+                          </button>
+                        )}
+
+                        {onArchiveProject && activeProjects.length > 1 && (
+                          <button
+                            id={`archive-space-${proj.id}`}
+                            onClick={() => { onArchiveProject(proj.id); setMenuOpenId(null); }}
+                            className="w-full px-3 py-1.5 flex items-center space-x-2 hover:bg-slate-50 dark:hover:bg-[#1C1F26] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                          >
+                            <Archive className="w-3.5 h-3.5" />
+                            <span>Archive Space</span>
+                          </button>
+                        )}
+
+                        {projects.length > 1 && (
+                          <button
+                            id={`delete-project-${proj.id}`}
+                            onClick={() => { onDeleteProject(proj.id); setMenuOpenId(null); }}
+                            className="w-full px-3 py-1.5 flex items-center space-x-2 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-rose-500 dark:text-rose-400 border-t border-slate-200 dark:border-slate-800 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Space</span>
+                          </button>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Archived Spaces */}
+        {archivedProjects.length > 0 && (
+          <div id="archived-spaces" className="mt-4">
+            <button
+              onClick={() => setArchivedExpanded(!archivedExpanded)}
+              className="flex items-center space-x-1 px-3 mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider hover:text-slate-700 dark:hover:text-slate-300 w-full"
+            >
+              {archivedExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              <Archive className="w-3 h-3" />
+              <span>Archived ({archivedProjects.length})</span>
+            </button>
+            {archivedExpanded && (
+              <div className="space-y-1">
+                {archivedProjects.map((proj) => (
+                  <div
+                    key={proj.id}
+                    id={`archived-item-${proj.id}`}
+                    className="group flex items-center justify-between rounded-lg p-1 border border-transparent hover:bg-slate-50 dark:hover:bg-[#1C1F26]/40"
+                  >
+                    <div className="flex-1 min-w-0 flex items-center space-x-2.5 px-2 py-1.5 text-xs text-slate-500 dark:text-slate-500">
+                      <span className="w-3.5 text-center flex-shrink-0 text-[13px] leading-none opacity-60">{proj.icon || "🗂️"}</span>
+                      <span className="truncate italic">{proj.name}</span>
+                    </div>
+                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      {onRestoreProject && (
+                        <button
+                          id={`restore-space-${proj.id}`}
+                          onClick={() => onRestoreProject(proj.id)}
+                          className="p-1 rounded hover:text-emerald-500 text-slate-400 cursor-pointer"
+                          title="Restore Space"
+                        >
+                          <ArchiveRestore className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      <button
+                        id={`delete-archived-${proj.id}`}
+                        onClick={() => onDeleteProject(proj.id)}
+                        className="p-1 rounded hover:text-rose-500 text-slate-400 cursor-pointer"
+                        title="Delete Permanently"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -13,6 +13,9 @@ create table if not exists public.projects (
   ideas jsonb not null default '[]'::jsonb,
   teams jsonb not null default '[]'::jsonb,
   members jsonb not null default '[]'::jsonb,
+  color text,
+  icon text,
+  archived boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
