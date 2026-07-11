@@ -738,7 +738,7 @@ export default function KanbanBoard({
                           <span className="font-mono text-slate-500 dark:text-slate-400 font-semibold">{task.id}</span>
                           <div className="flex items-center space-x-2">
                             <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                              {task.priority}
+                              {PRIORITIES.find(p => p.value === task.priority)?.label || task.priority}
                             </span>
                             <button
                               onClick={(e) => handleDeleteTask(e, task.id)}
@@ -1077,14 +1077,14 @@ export default function KanbanBoard({
                               {(() => {
                                 const p = task.priority.toLowerCase();
                                 let badgeColors = "bg-slate-100 text-slate-500 dark:text-slate-600 border border-slate-200/50 dark:bg-slate-800/40 dark:text-slate-400 dark:border-slate-700/60";
-                                if (p === "critical" || p === "high") {
+                                if (p === "critical" || p === "high" || p === "urgent") {
                                   badgeColors = "bg-rose-50 text-rose-600 border border-[#fecdd3]/40 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-500/20";
                                 } else if (p === "medium") {
                                   badgeColors = "bg-indigo-50 text-indigo-600 border border-[#c7d2fe]/40 dark:bg-indigo-950/20 dark:text-indigo-400 dark:border-indigo-500/20";
                                 }
                                 return (
                                   <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider ${badgeColors}`}>
-                                    {task.priority}
+                                    {priorityConfig?.label || task.priority}
                                   </span>
                                 );
                               })()}
@@ -1104,9 +1104,11 @@ export default function KanbanBoard({
                           </h4>
 
                           {/* Description */}
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3">
-                            {task.description || "Logged from Daily Logs board"}
-                          </p>
+                          {(task.description || task.notes) && (
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed mb-3 whitespace-pre-wrap">
+                              {task.description || task.notes}
+                            </p>
+                          )}
 
                           {/* Divider */}
                           <div className="border-t border-slate-100 dark:border-slate-800/60 my-2.5" />

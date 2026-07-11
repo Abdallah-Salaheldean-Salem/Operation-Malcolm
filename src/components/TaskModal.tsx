@@ -469,7 +469,7 @@ export default function TaskModal({
               <div>
                 <label htmlFor="task-actual-hours" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center space-x-1">
                   <Clock className="w-3 h-3 text-slate-500 dark:text-slate-400" />
-                  <span>Logged Actual</span>
+                  <span>Logged Time</span>
                 </label>
                 <input
                   id="task-actual-hours"
