@@ -53,6 +53,7 @@ export interface ProjectModule {
   readiness?: ModuleReadiness;
   dependsOn?: string[]; // ids of modules this one depends on
   description?: string;
+  tags?: string[];
 }
 
 // SMART goal-setting framework (Specific, Measurable, Achievable, Relevant, Time-bound)
@@ -65,7 +66,8 @@ export interface SmartGoal {
   relevant: string;    // R — why it matters
   timeBound: string;   // T — target date (YYYY-MM-DD)
   progress?: number;   // completion toward the goal (0 - 100)
-  moduleId?: string;   // optional link to a module
+  moduleIds?: string[];  // optional links to modules
+  tags?: string[];
 }
 
 export interface IdeaItem {

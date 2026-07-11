@@ -46,7 +46,10 @@ function Ring({ value, color, size = 46 }: { value: number; color: string; size?
 
 export default function ModulesView({ project, onUpdateProject, onOpenTaskModal }: ModulesViewProps) {
   const [groupBy, setGroupBy] = useState<"modules" | "tags">("modules");
+  const [addingTag, setAddingTag] = useState(false);
+  const [newTagInput, setNewTagInput] = useState("");
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null);
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [editingModule, setEditingModule] = useState<ProjectModule | "new" | null>(null);
   const [editingGoal, setEditingGoal] = useState<SmartGoal | "new" | null>(null);
 
@@ -96,7 +99,19 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
   // --- module CRUD ---
   const saveModule = (mod: ProjectModule) => {
     const exists = modules.some((m) => m.id === mod.id);
-    setModules(exists ? modules.map((m) => (m.id === mod.id ? mod : m)) : [...modules, mod]);
+    const updatedModules = exists ? modules.map((m) => (m.id === mod.id ? mod : m)) : [...modules, mod];
+    const combinedTags = Array.from(new Set([...(project.tags || []), ...(mod.tags || [])]));
+    
+    let updatedGoals = project.goals || [];
+    if (!exists && selectedGoalId) {
+      updatedGoals = updatedGoals.map(g => 
+        g.id === selectedGoalId 
+          ? { ...g, moduleIds: [...(g.moduleIds || []), mod.id] } 
+          : g
+      );
+    }
+
+    onUpdateProject({ ...project, modules: updatedModules, tags: combinedTags, goals: updatedGoals });
     setEditingModule(null);
   };
   const deleteModule = (id: string) => {
@@ -118,10 +133,43 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
   // --- goal CRUD ---
   const saveGoal = (g: SmartGoal) => {
     const exists = goals.some((x) => x.id === g.id);
-    setGoals(exists ? goals.map((x) => (x.id === g.id ? g : x)) : [...goals, g]);
+    const updatedGoals = exists ? goals.map((x) => (x.id === g.id ? g : x)) : [...goals, g];
+    const combinedTags = Array.from(new Set([...(project.tags || []), ...(g.tags || [])]));
+    onUpdateProject({ ...project, goals: updatedGoals, tags: combinedTags });
     setEditingGoal(null);
   };
-  const deleteGoal = (id: string) => setGoals(goals.filter((g) => g.id !== id));
+  const deleteGoal = (id: string) => {
+    const goalToDelete = goals.find((g) => g.id === id);
+    if (!goalToDelete) return;
+
+    const moduleIdsToDelete = goalToDelete.moduleIds || [];
+    const tagsToDelete = goalToDelete.tags || [];
+
+    const updatedGoals = goals.filter((g) => g.id !== id);
+    const updatedModules = modules
+      .filter((m) => !moduleIdsToDelete.includes(m.id))
+      .map((m) => ({
+        ...m,
+        dependsOn: (m.dependsOn || []).filter((d) => !moduleIdsToDelete.includes(d)),
+      }));
+
+    const remainingTags = (project.tags || []).filter((t) => !tagsToDelete.includes(t));
+    const updatedTasks = project.tasks.map((t) =>
+      t.moduleId && moduleIdsToDelete.includes(t.moduleId) ? { ...t, moduleId: undefined } : t
+    );
+
+    onUpdateProject({
+      ...project,
+      goals: updatedGoals,
+      modules: updatedModules,
+      tags: remainingTags,
+      tasks: updatedTasks,
+    });
+
+    if (selectedGoalId === id) setSelectedGoalId(null);
+  };
+
+
 
   const tagStats = (tag: string) => {
     const ts = project.tasks.filter((t) => (t.tags || []).includes(tag));
@@ -134,6 +182,14 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
 
   const drillTasks = selectedModuleId ? tasksOfModule(selectedModuleId) : [];
   const selectedModule = modules.find((m) => m.id === selectedModuleId);
+
+  const selectedGoal = selectedGoalId ? goals.find((g) => g.id === selectedGoalId) : null;
+  const filteredModules = selectedGoal 
+    ? modules.filter((m) => (selectedGoal.moduleIds || []).includes(m.id) || (selectedGoal.tags && m.tags && selectedGoal.tags.some(t => m.tags?.includes(t))))
+    : modules;
+  const filteredTags = selectedGoal
+    ? (project.tags || []).filter(t => (selectedGoal.tags || []).includes(t) || filteredModules.some(m => (m.tags || []).includes(t)))
+    : (project.tags || []);
 
   return (
     <div id="modules-view-root" className="flex flex-col h-full flex-1 overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-4 md:p-6 space-y-6 select-none">
@@ -164,7 +220,7 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {goals.map((g) => {
-              const linked = g.moduleId ? modules.find((m) => m.id === g.moduleId) : undefined;
+              const linkedModules = (g.moduleIds || []).map(id => modules.find(m => m.id === id)).filter(Boolean) as ProjectModule[];
               const overdue = g.timeBound && new Date(g.timeBound) < new Date() && (g.progress || 0) < 100;
               const smartRows: [string, string, string][] = [
                 ["S", "Specific", g.specific],
@@ -172,15 +228,23 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
                 ["A", "Achievable", g.achievable],
                 ["R", "Relevant", g.relevant],
               ];
+              const isGoalSelected = selectedGoalId === g.id;
               return (
-                <div key={g.id} id={`goal-card-${g.id}`} className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl p-4 shadow-sm flex flex-col">
+                <div 
+                  key={g.id} 
+                  id={`goal-card-${g.id}`} 
+                  onClick={() => setSelectedGoalId(isGoalSelected ? null : g.id)}
+                  className={`bg-white dark:bg-[#14171C] border rounded-xl p-4 shadow-sm flex flex-col cursor-pointer transition-all ${
+                    isGoalSelected ? "border-indigo-500 ring-1 ring-indigo-500/30" : "border-slate-200 dark:border-[#1E222B] hover:border-slate-300 dark:hover:border-slate-700"
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">{g.title}</h3>
                     <div className="flex items-center space-x-1 flex-shrink-0">
-                      <button onClick={() => setEditingGoal(g)} title="Edit goal" className="p-1 text-slate-400 hover:text-indigo-500 rounded cursor-pointer">
+                      <button onClick={(e) => { e.stopPropagation(); setEditingGoal(g); }} title="Edit goal" className="p-1 text-slate-400 hover:text-indigo-500 rounded cursor-pointer">
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => deleteGoal(g.id)} title="Delete goal" className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer">
+                      <button onClick={(e) => { e.stopPropagation(); deleteGoal(g.id); }} title="Delete goal" className="p-1 text-slate-400 hover:text-rose-500 rounded cursor-pointer">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -204,11 +268,25 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
                         <Calendar className="w-3 h-3" />
                         {g.timeBound || "No date"} {overdue && "(overdue)"}
                       </span>
-                      {linked && (
-                        <span className="ml-auto flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border" style={{ color: linked.color, borderColor: `${linked.color}55`, backgroundColor: `${linked.color}12` }}>
-                          {linked.icon} {linked.name}
+                      {linkedModules.length > 0 && (
+                        <span className="ml-auto flex items-center gap-1">
+                          {linkedModules.map(linked => (
+                            <span key={linked.id} className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border" style={{ color: linked.color, borderColor: `${linked.color}55`, backgroundColor: `${linked.color}12` }}>
+                              {linked.icon} {linked.name}
+                            </span>
+                          ))}
                         </span>
                       )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1 mt-2">
+                      {(g.tags || []).map(t => (
+                        <span key={t} className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                          #{t}
+                        </span>
+                      ))}
+                      <button onClick={() => setEditingGoal(g)} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors border border-transparent hover:border-indigo-200 dark:hover:border-indigo-500/30 cursor-pointer">
+                        <Plus className="w-2.5 h-2.5" /> Add Tag
+                      </button>
                     </div>
                   </div>
 
@@ -267,13 +345,23 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
                 <span>Add Module</span>
               </button>
             )}
+            {groupBy === "tags" && (
+              <button
+                id="add-tag-btn"
+                onClick={() => setAddingTag(true)}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 cursor-pointer shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Tag</span>
+              </button>
+            )}
           </div>
         </div>
 
         {groupBy === "modules" ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {modules.map((m) => {
+              {filteredModules.map((m) => {
                 const st = moduleStats(m.id);
                 const rm = readinessMeta(m.readiness);
                 const rIdx = readinessIndex(m.readiness);
@@ -294,7 +382,17 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
                         <span className="text-xl flex-shrink-0" style={{ filter: "saturate(1.1)" }}>{m.icon || "🧩"}</span>
                         <div className="min-w-0">
                           <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{m.name}</h3>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400">{m.owner || "Unassigned"} · {st.total} tasks</span>
+                          <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">{m.owner || "Unassigned"} · {st.total} tasks</span>
+                            {(m.tags || []).map(t => (
+                              <span key={t} className="text-[9px] px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 leading-none border border-slate-200 dark:border-slate-700/50">
+                                #{t}
+                              </span>
+                            ))}
+                            <button onClick={(e) => { e.stopPropagation(); setEditingModule(m); }} className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors border border-transparent hover:border-indigo-200 dark:hover:border-indigo-500/30 cursor-pointer ml-1">
+                              <Plus className="w-2.5 h-2.5" /> Add Tag
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <Ring value={st.progress} color={m.color || "#6366f1"} />
@@ -403,9 +501,11 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
               })()}
             </div>
 
-            {modules.length === 0 && (
+            {filteredModules.length === 0 && (
               <div className="border border-dashed border-slate-300 dark:border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500 dark:text-slate-400">
-                No modules yet. Add a module to break this project into subsystems — tasks auto-classify by matching tag until you assign them.
+                {modules.length === 0 
+                  ? "No modules yet. Add a module to break this project into subsystems — tasks auto-classify by matching tag until you assign them."
+                  : "No modules found matching this goal's tags or explicitly linked modules."}
               </div>
             )}
 
@@ -452,32 +552,48 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
         ) : (
           /* ---- Tag grouping (read-only) ---- */
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {(project.tags || []).map((tag) => {
+            {filteredTags.map((tag) => {
               const st = tagStats(tag);
               return (
-                <div key={tag} className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl p-4 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <TagIcon className="w-4 h-4 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{tag}</h3>
+                <div key={tag} className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl p-4 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <TagIcon className="w-4 h-4 text-indigo-500 dark:text-indigo-400 flex-shrink-0" />
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-white truncate">{tag}</h3>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">{st.total} tasks</span>
+                        <button 
+                          onClick={() => {
+                            onUpdateProject({
+                              ...project,
+                              tags: (project.tags || []).filter(t => t !== tag)
+                            });
+                          }}
+                          className="p-1 text-slate-400 hover:text-rose-500 rounded transition-colors cursor-pointer"
+                          title="Remove tag"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">{st.total} tasks</span>
-                  </div>
-                  <div className="mt-2.5 w-full bg-slate-100 dark:bg-[#0F1115] rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${st.progress}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
-                    <span>{st.progress}% done</span>
-                    <span className="flex items-center gap-2">
-                      <span className="text-blue-500 dark:text-blue-400">{st.counts.inProgress} doing</span>
-                      <span className="text-rose-500 dark:text-rose-400">{st.counts.blocked} blocked</span>
-                      <span className="font-mono">{st.est}h</span>
-                    </span>
+                    <div className="mt-2.5 w-full bg-slate-100 dark:bg-[#0F1115] rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${st.progress}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+                      <span>{st.progress}% done</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-blue-500 dark:text-blue-400">{st.counts.inProgress} doing</span>
+                        <span className="text-rose-500 dark:text-rose-400">{st.counts.blocked} blocked</span>
+                        <span className="font-mono">{st.est}h</span>
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
             })}
-            {(project.tags || []).length === 0 && (
+            {filteredTags.length === 0 && (
               <div className="border border-dashed border-slate-300 dark:border-slate-800 rounded-xl p-8 text-center text-xs text-slate-500 dark:text-slate-400 col-span-full">
                 This project has no tags to group by.
               </div>
@@ -506,6 +622,79 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
           onSave={saveGoal}
         />
       )}
+
+      {/* ============ ADD TAG MODAL ============ */}
+      {addingTag && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4" onClick={() => setAddingTag(false)}>
+          <div onClick={(e) => e.stopPropagation()} className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl w-full max-w-sm shadow-2xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">New Tag</h3>
+              <button onClick={() => setAddingTag(false)} className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5">
+              <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Tag Name</label>
+              <input 
+                autoFocus
+                value={newTagInput} 
+                onChange={(e) => setNewTagInput(e.target.value)} 
+                onKeyDown={(e) => { 
+                  if (e.key === 'Enter') { 
+                    e.preventDefault();
+                    const tag = newTagInput.trim();
+                    if (tag) {
+                      const currentTags = project.tags || [];
+                      const newTags = currentTags.includes(tag) ? currentTags : [...currentTags, tag];
+                      
+                      let updatedGoals = project.goals || [];
+                      if (selectedGoalId) {
+                        updatedGoals = updatedGoals.map(g => 
+                          g.id === selectedGoalId && !(g.tags || []).includes(tag)
+                            ? { ...g, tags: [...(g.tags || []), tag] }
+                            : g
+                        );
+                      }
+                      
+                      onUpdateProject({ ...project, tags: newTags, goals: updatedGoals });
+                    }
+                    setAddingTag(false);
+                    setNewTagInput("");
+                  } 
+                }}
+                placeholder="e.g. Firmware" 
+                className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 text-xs" 
+              />
+            </div>
+            <div className="px-5 py-3.5 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2 bg-slate-50/50 dark:bg-[#0F1115]/50">
+              <button onClick={() => setAddingTag(false)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-[#1C1F26] text-slate-600 dark:text-slate-300 cursor-pointer">Cancel</button>
+              <button 
+                onClick={() => {
+                  const tag = newTagInput.trim();
+                  if (tag) {
+                    const currentTags = project.tags || [];
+                    const newTags = currentTags.includes(tag) ? currentTags : [...currentTags, tag];
+                    
+                    let updatedGoals = project.goals || [];
+                    if (selectedGoalId) {
+                      updatedGoals = updatedGoals.map(g => 
+                        g.id === selectedGoalId && !(g.tags || []).includes(tag)
+                          ? { ...g, tags: [...(g.tags || []), tag] }
+                          : g
+                      );
+                    }
+                    
+                    onUpdateProject({ ...project, tags: newTags, goals: updatedGoals });
+                  }
+                  setAddingTag(false);
+                  setNewTagInput("");
+                }} 
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer"
+              >
+                Create Tag
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -531,6 +720,20 @@ function ModuleEditor({
   const [readiness, setReadiness] = useState<ModuleReadiness>(initial?.readiness || "design");
   const [dependsOn, setDependsOn] = useState<string[]>(initial?.dependsOn || []);
   const [description, setDescription] = useState(initial?.description || "");
+  const [tags, setTags] = useState<string[]>(initial?.tags || []);
+  const [tagInput, setTagInput] = useState("");
+
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (t && !tags.includes(t)) {
+      setTags([...tags, t]);
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (t: string) => {
+    setTags(tags.filter(tag => tag !== t));
+  };
 
   const submit = () => {
     if (!name.trim()) return;
@@ -543,6 +746,7 @@ function ModuleEditor({
       readiness,
       dependsOn,
       description: description.trim() || undefined,
+      tags,
     });
   };
 
@@ -606,6 +810,35 @@ function ModuleEditor({
             </div>
           )}
           <div>
+            <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Tags</label>
+            <div className="flex flex-col gap-2">
+              {tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map(t => (
+                    <span key={t} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      #{t}
+                      <button type="button" onClick={() => removeTag(t)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input 
+                  value={tagInput} 
+                  onChange={(e) => setTagInput(e.target.value)} 
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                  placeholder="Add a tag..." 
+                  className="flex-1 bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 text-xs" 
+                />
+                <button type="button" onClick={addTag} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-[#1C1F26] hover:bg-slate-200 dark:hover:bg-[#2A2F3A] text-slate-600 dark:text-slate-300 cursor-pointer border border-slate-200 dark:border-slate-800">
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+          <div>
             <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 resize-none" />
           </div>
@@ -632,8 +865,21 @@ function GoalEditor({
   onSave: (g: SmartGoal) => void;
 }) {
   const [g, setG] = useState<SmartGoal>(
-    initial || { id: `goal-${Date.now()}`, title: "", specific: "", measurable: "", achievable: "", relevant: "", timeBound: "", progress: 0 }
+    initial || { id: `goal-${Date.now()}`, title: "", specific: "", measurable: "", achievable: "", relevant: "", timeBound: "", progress: 0, tags: [] }
   );
+  const [tagInput, setTagInput] = useState("");
+  
+  const addTag = () => {
+    const t = tagInput.trim();
+    if (t && !(g.tags || []).includes(t)) {
+      set({ tags: [...(g.tags || []), t] });
+    }
+    setTagInput("");
+  };
+
+  const removeTag = (t: string) => {
+    set({ tags: (g.tags || []).filter(tag => tag !== t) });
+  };
   const set = (patch: Partial<SmartGoal>) => setG((prev) => ({ ...prev, ...patch }));
   const fields: [keyof SmartGoal, string, string, string][] = [
     ["specific", "S — Specific", "What exactly will be accomplished?", "specific"],
@@ -666,11 +912,58 @@ function GoalEditor({
               <input type="date" value={g.timeBound} onChange={(e) => set({ timeBound: e.target.value })} className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500" />
             </div>
             <div>
-              <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Linked module</label>
-              <select value={g.moduleId || ""} onChange={(e) => set({ moduleId: e.target.value || undefined })} className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer">
-                <option value="">None</option>
-                {modules.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+              <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Linked Modules</label>
+              <div className="flex flex-wrap gap-1">
+                {modules.map((m) => {
+                  const isLinked = (g.moduleIds || []).includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        const current = g.moduleIds || [];
+                        set({ moduleIds: isLinked ? current.filter(id => id !== m.id) : [...current, m.id] });
+                      }}
+                      className={`text-[10px] px-2 py-1 rounded border transition-colors cursor-pointer ${
+                        isLinked
+                          ? "bg-indigo-600 text-white border-indigo-700"
+                          : "bg-slate-50 dark:bg-[#0F1115] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {m.icon} {m.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Tags</label>
+            <div className="flex flex-col gap-2">
+              {(g.tags || []).length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {(g.tags || []).map(t => (
+                    <span key={t} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                      #{t}
+                      <button type="button" onClick={() => removeTag(t)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input 
+                  value={tagInput} 
+                  onChange={(e) => setTagInput(e.target.value)} 
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }}
+                  placeholder="Add a tag..." 
+                  className="flex-1 bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 text-xs" 
+                />
+                <button type="button" onClick={addTag} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-100 dark:bg-[#1C1F26] hover:bg-slate-200 dark:hover:bg-[#2A2F3A] text-slate-600 dark:text-slate-300 cursor-pointer border border-slate-200 dark:border-slate-800">
+                  Add
+                </button>
+              </div>
             </div>
           </div>
           <div>

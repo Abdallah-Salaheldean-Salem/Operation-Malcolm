@@ -5,7 +5,7 @@ export const INITIAL_PROJECTS: Project[] = [
     id: "proj-innovation-hub",
     name: "💻 Code of Innovation Hub",
     description: "Master workspace for tracking the design, electronics, fabrication, and smart systems of the Innovation Hub.",
-    tags: ["Electronics", "Fabrication", "3D Printing", "Software", "Safety", "Admin"],
+    tags: [],
     modules: [
       { id: "mod-electronics", name: "Electronics", icon: "🔌", color: "#6366f1", owner: "Abdallah", readiness: "prototype" },
       { id: "mod-fabrication", name: "Fabrication", icon: "🔨", color: "#f59e0b", owner: "Alice", readiness: "bench-test", dependsOn: ["mod-electronics"] },
@@ -33,7 +33,7 @@ export const INITIAL_PROJECTS: Project[] = [
         relevant: "Required before the lab can host external visitors.",
         timeBound: "2026-07-31",
         progress: 65,
-        moduleId: "mod-safety",
+        moduleIds: ["mod-safety"],
       },
     ],
     columns: [

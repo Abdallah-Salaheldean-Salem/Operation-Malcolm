@@ -437,19 +437,20 @@ export default function App() {
         createdAt: new Date().toISOString().split("T")[0],
       };
       updatedTasks = [...activeProject.tasks, newTask];
-
-      // Automatically add new tags to the project tags catalog
-      const newProjectTags = [...activeProject.tags];
-      newTask.tags.forEach((tag) => {
-        if (!newProjectTags.includes(tag)) {
-          newProjectTags.push(tag);
-        }
-      });
-      activeProject.tags = newProjectTags;
     }
+
+    // Automatically add new tags to the project tags catalog
+    const newProjectTags = [...(activeProject.tags || [])];
+    const incomingTags = taskData.tags || [];
+    incomingTags.forEach((tag) => {
+      if (!newProjectTags.includes(tag)) {
+        newProjectTags.push(tag);
+      }
+    });
 
     handleUpdateProject({
       ...activeProject,
+      tags: newProjectTags,
       tasks: updatedTasks,
     });
     setIsTaskModalOpen(false);
