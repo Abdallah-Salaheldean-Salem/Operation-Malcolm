@@ -62,6 +62,10 @@ export default function App() {
   });
 
   const [activeView, setActiveView] = useState<AppView>(() => {
+    // Deep link support: /?view=board opens straight into a view (also used
+    // by PWA app shortcuts).
+    const urlView = new URLSearchParams(window.location.search).get("view");
+    if (urlView) return urlView as AppView;
     const saved = localStorage.getItem("clickup_active_view");
     return (saved as AppView) || "activity"; // default to Daily Logs for high similarity on load
   });
@@ -591,8 +595,50 @@ export default function App() {
       {/* Main Workspace Stage */}
       <main id="app-workspace-stage" className="flex-1 flex flex-col overflow-hidden h-full relative pb-16 md:pb-0">
         
-        {/* 1. TOP UTILITY ACTION BAR */}
-        <div id="workspace-top-utility-bar" className="h-10 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#1A1F26] px-3 md:px-6 flex items-center justify-between select-none shrink-0">
+        {/* 0. MOBILE APP HEADER (ClickUp-style: identity + theme + quick add) */}
+        <div
+          className="md:hidden flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-[#161A22] shrink-0 select-none"
+          style={{ paddingTop: "calc(env(safe-area-inset-top) + 0.75rem)" }}
+        >
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="flex flex-1 items-center space-x-3 min-w-0 overflow-hidden text-left cursor-pointer mr-2"
+            title="Open workspace menu"
+          >
+            <img src="/icon.svg" alt="Operation Malcolm" className="w-10 h-10 rounded-full shadow-md shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-base font-black text-slate-900 dark:text-white leading-tight truncate">Operation Malcolm</h1>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{activeProject?.name}</p>
+            </div>
+          </button>
+          <div className="flex items-center space-x-1.5 shrink-0">
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              title="Undo"
+              className={`p-2 rounded-full transition-colors ${undoStack.length > 0 ? "text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-[#1C2027]" : "text-slate-300 dark:text-slate-700"}`}
+            >
+              <Undo2 className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title="Toggle theme"
+              className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-[#1C2027] transition-colors"
+            >
+              {theme === "dark" ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
+            </button>
+            <button
+              onClick={() => handleOpenTaskModal(null)}
+              title="New task"
+              className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-[0_2px_12px_rgba(79,70,229,0.45)] transition-colors"
+            >
+              <Plus className="w-5 h-5 stroke-[2.75]" />
+            </button>
+          </div>
+        </div>
+
+        {/* 1. TOP UTILITY ACTION BAR (desktop) */}
+        <div id="workspace-top-utility-bar" className="h-10 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#1A1F26] px-3 md:px-6 hidden md:flex items-center justify-between select-none shrink-0">
           <div className="flex items-center space-x-3.5">
             {/* Sidebar toggle */}
             <button
@@ -689,7 +735,7 @@ export default function App() {
         <div id="workspace-dynamic-header" className="px-3 md:px-6 pt-4 md:pt-5 pb-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-[#161A22] select-none shrink-0">
 
           {/* Mobile project pills */}
-          <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 -mx-3 px-3" style={{ scrollbarWidth: "none" }}>
+          <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar -mx-3 px-3" style={{ scrollbarWidth: "none" }}>
             {orderedVisibleSpaces.filter(({ depth }) => depth === 0).map(({ proj }) => {
               const isActive = proj.id === activeProjectId;
               return (
@@ -716,8 +762,8 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            
+          <div className="hidden md:flex md:items-center justify-between gap-4">
+
             {/* Title Block */}
             <div className="flex items-start space-x-4">
               <div
@@ -825,7 +871,7 @@ export default function App() {
         </div>
 
         {/* 4. TABS & GLOBAL FILTER TOOLBAR ROW */}
-        <div id="workspace-tabs-filter-bar" className="px-3 md:px-6 py-2 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#161A22] flex flex-col xl:flex-row xl:items-center justify-between gap-3 shrink-0 select-none">
+        <div id="workspace-tabs-filter-bar" className="px-3 md:px-6 py-2 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#161A22] hidden md:flex flex-col xl:flex-row xl:items-center justify-between gap-3 shrink-0 select-none">
           
           {/* Horizontal custom sliding views tabs (desktop; mobile uses the bottom nav) */}
           <div className="hidden md:flex items-center space-x-1.5">
@@ -1022,7 +1068,7 @@ export default function App() {
 
         {/* Toast Notification helper */}
         {showToast && (
-          <div className="absolute bottom-6 right-6 bg-slate-200 dark:bg-[#1C2027] border border-indigo-500/20 text-indigo-400 text-xs px-4 py-2 rounded-xl shadow-xl z-50 flex items-center space-x-2 animate-bounce">
+          <div className="absolute bottom-20 md:bottom-6 right-4 md:right-6 bg-slate-200 dark:bg-[#1C2027] border border-indigo-500/20 text-indigo-400 text-xs px-4 py-2 rounded-xl shadow-xl z-50 flex items-center space-x-2 animate-bounce">
             <Check className="w-4 h-4 text-indigo-400 stroke-[3]" />
             <span className="font-semibold">Direct link copied to clipboard!</span>
           </div>

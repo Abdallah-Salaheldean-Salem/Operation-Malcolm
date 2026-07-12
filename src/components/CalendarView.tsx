@@ -252,7 +252,7 @@ export default function CalendarView({
     <div id="calendar-grid-view-root" className="flex h-full w-full overflow-hidden select-none bg-slate-50 dark:bg-[#0F1115] text-slate-800 dark:text-slate-200">
       
       {/* LEFT SECTION: MAIN CALENDAR STAGE */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden p-6 border-r border-slate-200 dark:border-[#1E222B]">
+      <div className="flex-1 flex flex-col h-full overflow-hidden p-3 md:p-6 border-r border-slate-200 dark:border-[#1E222B]">
         
         {/* Navigation Toolbar */}
         <div id="calendar-view-toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-[#1E222B] mb-4">

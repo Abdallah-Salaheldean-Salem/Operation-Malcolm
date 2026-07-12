@@ -405,7 +405,7 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
   };
 
   return (
-    <div id="daily-logs-view-root" className="flex flex-col lg:flex-row h-full w-full overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-6 gap-6 select-none text-slate-850 dark:text-slate-200">
+    <div id="daily-logs-view-root" className="flex flex-col lg:flex-row h-full w-full overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-3 md:p-6 gap-4 md:gap-6 select-none text-slate-850 dark:text-slate-200">
       
       {/* Left Column: Task Logger Form */}
       <div id="task-logger-form-container" className="flex-1 lg:max-w-md bg-white dark:bg-[#14171C] border border-slate-250/80 dark:border-[#1E222B] rounded-xl p-6 flex flex-col h-fit shadow-xs">

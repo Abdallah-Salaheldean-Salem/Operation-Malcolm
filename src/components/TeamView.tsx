@@ -152,7 +152,7 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
   };
 
   return (
-    <div id="team-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1 overflow-y-auto p-6 space-y-6">      
+    <div id="team-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6">      
       {/* View Header */}
       <div id="team-header-block" className="flex items-center justify-between">
         <div className="flex items-center space-x-2.5">

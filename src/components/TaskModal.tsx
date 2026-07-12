@@ -180,14 +180,18 @@ export default function TaskModal({
   return (
     <div
       id="task-modal-overlay"
-      className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-2 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-0 sm:p-4 overflow-y-auto"
     >
       <div
         id="task-modal-container"
-        className="bg-white dark:bg-[#1C1F26] rounded-xl shadow-2xl border border-slate-200 dark:border-[#1E222B] w-full max-w-4xl max-h-[90dvh] flex flex-col text-slate-800 dark:text-slate-200"
+        className="bg-white dark:bg-[#1C1F26] rounded-none sm:rounded-xl shadow-2xl border-0 sm:border border-slate-200 dark:border-[#1E222B] w-full max-w-4xl h-[100dvh] sm:h-auto max-h-[100dvh] sm:max-h-[90dvh] flex flex-col text-slate-800 dark:text-slate-200"
       >
         {/* Header */}
-        <div id="task-modal-header" className="px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-[#161A22] flex items-center justify-between bg-slate-50 dark:bg-[#0F1115] rounded-t-xl">
+        <div
+          id="task-modal-header"
+          className="px-4 sm:px-6 py-4 border-b border-slate-100 dark:border-[#161A22] flex items-center justify-between bg-slate-50 dark:bg-[#0F1115] rounded-t-none sm:rounded-t-xl"
+          style={{ paddingTop: "max(1rem, env(safe-area-inset-top))" }}
+        >
           <div className="flex items-center space-x-2">
             <span className="bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-sm border border-indigo-200 dark:border-indigo-500/20">
               {isEditing ? "Task Details" : "Create Task"}
@@ -653,7 +657,11 @@ export default function TaskModal({
         </form>
 
         {/* Footer Actions */}
-        <div id="task-modal-footer" className="px-4 sm:px-6 py-4 border-t border-slate-100 dark:border-[#161A22] bg-slate-50 dark:bg-[#0F1115] flex flex-wrap gap-3 items-center justify-between rounded-b-xl">
+        <div
+          id="task-modal-footer"
+          className="px-4 sm:px-6 py-4 border-t border-slate-100 dark:border-[#161A22] bg-slate-50 dark:bg-[#0F1115] flex flex-wrap gap-3 items-center justify-between rounded-b-none sm:rounded-b-xl"
+          style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom))" }}
+        >
           <div>
             {isEditing && onDelete && (
               <button
