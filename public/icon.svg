@@ -3,39 +3,46 @@
     <clipPath id="round"><rect width="512" height="512" rx="104"/></clipPath>
   </defs>
   <g clip-path="url(#round)">
-    <rect width="512" height="512" fill="#3a2178"/>
+    <rect width="512" height="512" fill="#3c2280"/>
 
     <!-- concentric rings -->
     <g fill="none" stroke-linecap="round">
-      <circle cx="256" cy="252" r="238" stroke="#bf3b33" stroke-width="6"/>
-      <circle cx="256" cy="252" r="216" stroke="#bf3b33" stroke-width="6"/>
-      <circle cx="256" cy="252" r="196" stroke="#4aa7bd" stroke-width="9"/>
-      <circle cx="256" cy="300" r="120" stroke="#4aa7bd" stroke-width="8"/>
-      <circle cx="256" cy="300" r="98"  stroke="#bf3b33" stroke-width="8"/>
+      <circle cx="256" cy="250" r="242" stroke="#c03a34" stroke-width="5"/>
+      <circle cx="256" cy="250" r="224" stroke="#c03a34" stroke-width="5"/>
+      <circle cx="256" cy="250" r="206" stroke="#57b4cb" stroke-width="7"/>
+      <circle cx="256" cy="306" r="150" stroke="#57b4cb" stroke-width="6"/>
+      <circle cx="256" cy="306" r="132" stroke="#c03a34" stroke-width="6"/>
     </g>
 
     <!-- crest -->
-    <g fill="#bf3b33">
-      <!-- raised feathered wings (right half, mirrored) -->
+    <g fill="#c03a34">
+      <!-- wings: 3 bold feathers per side, sweeping up-and-out -->
       <g id="wing">
-        <path d="M244 300 Q344 248 434 224 Q356 286 262 308 Z"/>
-        <path d="M246 314 Q350 296 446 276 Q360 314 260 332 Z"/>
-        <path d="M250 328 Q338 334 406 352 Q346 358 262 354 Z"/>
+        <path d="M276 328 C322 300 360 274 396 250 C388 292 366 326 316 348 Z"/>
+        <path d="M280 348 C324 330 366 314 418 298 C384 328 340 348 302 360 Z"/>
+        <path d="M284 366 C322 360 362 360 404 368 C368 380 330 384 300 380 Z"/>
       </g>
       <use href="#wing" transform="matrix(-1 0 0 1 512 0)"/>
 
-      <!-- top spike -->
-      <path d="M256 52 L269 140 L256 118 L243 140 Z"/>
-      <!-- central mask/head -->
-      <path d="M256 112 L298 196 L284 302 L256 336 L228 302 L214 196 Z"/>
-      <!-- downward blade -->
-      <path d="M256 300 L276 370 L256 458 L236 370 Z"/>
-    </g>
+      <!-- top trident spike + barbs -->
+      <path d="M256 168 L263 250 L256 232 L249 250 Z"/>
+      <path d="M238 230 L253 252 L240 254 Z"/>
+      <path d="M274 230 L259 252 L272 254 Z"/>
 
-    <!-- eye slits (negative space) -->
-    <g fill="#3a2178">
-      <path d="M240 222 L259 236 L247 258 Z"/>
-      <path d="M272 222 L253 236 L265 258 Z"/>
+      <!-- mask eye chevrons  < > (open purple gap in centre) -->
+      <g id="eye">
+        <path d="M232 314 L276 296 L266 314 L276 332 Z"/>
+      </g>
+      <use href="#eye" transform="matrix(-1 0 0 1 512 0)"/>
+
+      <!-- central nose blade -->
+      <path d="M256 244 L265 300 L256 352 L247 300 Z"/>
+      <!-- central 4-point star -->
+      <path d="M256 312 L262 328 L256 344 L250 328 Z"/>
+      <path d="M234 328 L256 322 L278 328 L256 334 Z"/>
+
+      <!-- barbed downward tail -->
+      <path d="M256 352 L270 398 L260 408 L272 430 L256 466 L240 430 L252 408 L242 398 Z"/>
     </g>
   </g>
 </svg>
