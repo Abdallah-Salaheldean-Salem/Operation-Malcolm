@@ -38,7 +38,6 @@ import {
   ListTodo,
   Kanban,
   CalendarDays,
-  BarChart3,
   Lightbulb
 } from "lucide-react";
 
@@ -532,12 +531,14 @@ export default function App() {
     { value: "settings" as AppView, label: "Settings", icon: "⚙️" },
   ];
 
-  // Primary views surfaced in the mobile bottom navigation bar.
+  // Primary views surfaced in the mobile bottom navigation bar. Gantt is
+  // desktop-oriented (dense, drag-driven) so its slot goes to Daily Logs;
+  // Gantt stays reachable from the sidebar.
   const mobileNavItems: { value: AppView; label: string; Icon: any }[] = [
+    { value: "activity", label: "Logs", Icon: Clock },
     { value: "list", label: "Tasks", Icon: ListTodo },
     { value: "board", label: "Board", Icon: Kanban },
     { value: "calendar", label: "Calendar", Icon: CalendarDays },
-    { value: "gantt", label: "Gantt", Icon: BarChart3 },
     { value: "team", label: "Team", Icon: Users },
     { value: "ideas", label: "Ideas", Icon: Lightbulb },
   ];
@@ -760,6 +761,28 @@ export default function App() {
               <Plus className="w-4 h-4" />
               <span>New</span>
             </button>
+          </div>
+
+          {/* Mobile stat strip (compact take on the desktop metric cards) */}
+          <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar mt-3 -mx-3 px-3" style={{ scrollbarWidth: "none" }}>
+            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
+              <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{totalTasksCount} Tasks</span>
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
+              <Clock className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-[11px] font-bold text-blue-400 whitespace-nowrap">{inProgressCount} Ongoing</span>
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+              <span className="text-[11px] font-bold text-rose-400 whitespace-nowrap">{blockedCount} Blocked</span>
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
+              <div className="w-10 bg-slate-200 dark:bg-[#0B0D11] rounded-full h-1.5 overflow-hidden">
+                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${completionPercentage}%` }} />
+              </div>
+              <span className="text-[11px] font-bold text-emerald-400 whitespace-nowrap">{completionPercentage}%</span>
+            </div>
           </div>
 
           <div className="hidden md:flex md:items-center justify-between gap-4">
