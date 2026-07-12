@@ -34,7 +34,12 @@ import {
   Filter,
   Users,
   Sun,
-  Moon
+  Moon,
+  ListTodo,
+  Kanban,
+  CalendarDays,
+  BarChart3,
+  Lightbulb
 } from "lucide-react";
 
 // ClickUp-style Space accent colors offered in the sidebar picker.
@@ -523,6 +528,16 @@ export default function App() {
     { value: "settings" as AppView, label: "Settings", icon: "⚙️" },
   ];
 
+  // Primary views surfaced in the mobile bottom navigation bar.
+  const mobileNavItems: { value: AppView; label: string; Icon: any }[] = [
+    { value: "list", label: "Tasks", Icon: ListTodo },
+    { value: "board", label: "Board", Icon: Kanban },
+    { value: "calendar", label: "Calendar", Icon: CalendarDays },
+    { value: "gantt", label: "Gantt", Icon: BarChart3 },
+    { value: "team", label: "Team", Icon: Users },
+    { value: "ideas", label: "Ideas", Icon: Lightbulb },
+  ];
+
   // Quick slide tabs
   const handleSlideTabs = (direction: "left" | "right") => {
     const container = document.getElementById("horizontal-tabs-scrollable");
@@ -574,7 +589,7 @@ export default function App() {
       )}
 
       {/* Main Workspace Stage */}
-      <main id="app-workspace-stage" className="flex-1 flex flex-col overflow-hidden h-full relative">
+      <main id="app-workspace-stage" className="flex-1 flex flex-col overflow-hidden h-full relative pb-16 md:pb-0">
         
         {/* 1. TOP UTILITY ACTION BAR */}
         <div id="workspace-top-utility-bar" className="h-10 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#1A1F26] px-3 md:px-6 flex items-center justify-between select-none shrink-0">
@@ -671,7 +686,36 @@ export default function App() {
         </div>
 
         {/* 2. DYNAMIC WORKSPACE HEADER */}
-        <div id="workspace-dynamic-header" className="px-3 md:px-6 pt-5 pb-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-[#161A22] select-none shrink-0">
+        <div id="workspace-dynamic-header" className="px-3 md:px-6 pt-4 md:pt-5 pb-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-[#161A22] select-none shrink-0">
+
+          {/* Mobile project pills */}
+          <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 -mx-3 px-3" style={{ scrollbarWidth: "none" }}>
+            {orderedVisibleSpaces.filter(({ depth }) => depth === 0).map(({ proj }) => {
+              const isActive = proj.id === activeProjectId;
+              return (
+                <button
+                  key={proj.id}
+                  onClick={() => handleSelectProject(proj.id)}
+                  className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                    isActive
+                      ? "bg-indigo-600 text-white shadow-[0_2px_10px_rgba(79,70,229,0.35)]"
+                      : "bg-slate-200/70 dark:bg-[#14171C] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#1E222B]"
+                  }`}
+                >
+                  <span>{proj.icon || "📂"}</span>
+                  <span className="whitespace-nowrap max-w-[9rem] truncate">{proj.name}</span>
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="shrink-0 flex items-center gap-1 px-4 py-2 rounded-full text-sm font-bold text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-[#2E3541]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New</span>
+            </button>
+          </div>
+
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             
             {/* Title Block */}
@@ -712,7 +756,7 @@ export default function App() {
           </div>
 
           {/* 3. FOUR INLINE METRIC CARDS */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+          <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
             
             {/* Card 1: Sprint Velocity */}
             <div className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl p-4 flex items-center justify-between shadow-sm">
@@ -783,8 +827,8 @@ export default function App() {
         {/* 4. TABS & GLOBAL FILTER TOOLBAR ROW */}
         <div id="workspace-tabs-filter-bar" className="px-3 md:px-6 py-2 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#161A22] flex flex-col xl:flex-row xl:items-center justify-between gap-3 shrink-0 select-none">
           
-          {/* Horizontal custom sliding views tabs */}
-          <div className="flex items-center space-x-1.5">
+          {/* Horizontal custom sliding views tabs (desktop; mobile uses the bottom nav) */}
+          <div className="hidden md:flex items-center space-x-1.5">
             <button 
               onClick={() => handleSlideTabs("left")} 
               className="p-1 hover:bg-white dark:hover:bg-[#14171C] hover:text-slate-900 dark:text-white rounded text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
@@ -983,6 +1027,31 @@ export default function App() {
             <span className="font-semibold">Direct link copied to clipboard!</span>
           </div>
         )}
+
+        {/* Mobile bottom navigation bar */}
+        <nav
+          id="mobile-bottom-nav"
+          className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0B0D11]/95 backdrop-blur-lg border-t border-slate-200 dark:border-[#1A1F26] flex items-stretch justify-around"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          {mobileNavItems.map(({ value, label, Icon }) => {
+            const isActive = activeView === value;
+            return (
+              <button
+                key={value}
+                onClick={() => setActiveView(value)}
+                className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-semibold transition-colors cursor-pointer ${
+                  isActive
+                    ? "text-indigo-600 dark:text-indigo-400"
+                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? "stroke-[2.4]" : "stroke-2"}`} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
       </main>
 
