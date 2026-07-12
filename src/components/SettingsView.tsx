@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Project } from "../types";
-import { Settings, Info, Save, RotateCcw, Shield, ShieldCheck, Database, Sliders } from "lucide-react";
+import { Settings, Info, Save, RotateCcw, Shield, ShieldCheck, Database, Sliders, Download, Smartphone, CheckCircle2, Share } from "lucide-react";
 import { INITIAL_PROJECTS } from "../data";
 
 interface SettingsViewProps {
@@ -13,6 +13,48 @@ export default function SettingsView({ project, onUpdateProject, onResetWorkspac
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description || "");
   const [isSaved, setIsSaved] = useState(false);
+
+  // --- PWA install ---
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+
+  useEffect(() => {
+    const onBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const onInstalled = () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+
+    const ua = window.navigator.userAgent.toLowerCase();
+    setIsIOS(/iphone|ipad|ipod/.test(ua) && !(window as any).MSStream);
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true;
+    if (standalone) setIsInstalled(true);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const handleInstall = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      await installPrompt.userChoice;
+      setInstallPrompt(null);
+    } else {
+      // iOS Safari (and browsers without the prompt event): show manual steps.
+      setShowInstallHelp((v) => !v);
+    }
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,9 +76,9 @@ export default function SettingsView({ project, onUpdateProject, onResetWorkspac
       
       {/* View Header */}
       <div id="settings-header-block" className="flex items-center space-x-2.5">
-        <Settings className="w-5 h-5 text-indigo-500" />
+        <Settings className="w-5 h-5 text-[#c0392b]" />
         <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Workspace Settings</h2>
-        <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded font-semibold uppercase tracking-wide">
+        <span className="text-[10px] bg-[#c0392b]/10 border border-[#c0392b]/25 text-[#e06a5f] px-2 py-0.5 rounded font-semibold uppercase tracking-wide">
           Configuration Panel
         </span>
       </div>
@@ -100,6 +142,46 @@ export default function SettingsView({ project, onUpdateProject, onResetWorkspac
             </div>
             
             <div className="p-5 space-y-4">
+              {/* Install App (PWA) */}
+              <div className="bg-[#c0392b]/[0.06] dark:bg-[#c0392b]/10 p-4 rounded-xl border border-[#c0392b]/20 space-y-2">
+                <div className="flex items-center space-x-1.5 text-[10px] text-[#e06a5f] uppercase font-bold">
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>Install as App</span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Install Operation Malcolm to your device for a full-screen, app-like experience with its own icon and offline access.
+                </p>
+
+                {isInstalled ? (
+                  <div className="w-full py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>App Installed</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleInstall}
+                    className="w-full py-2 bg-[#c0392b] hover:bg-[#a5322c] text-white rounded-lg text-xs font-bold flex items-center justify-center space-x-1.5 shadow transition-colors cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Install App</span>
+                  </button>
+                )}
+
+                {showInstallHelp && !isInstalled && (
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed pt-1 border-t border-[#c0392b]/15 mt-2">
+                    {isIOS ? (
+                      <span className="flex items-start space-x-1.5">
+                        <Share className="w-3.5 h-3.5 mt-0.5 shrink-0 text-[#e06a5f]" />
+                        <span>On iPhone/iPad: tap the <b>Share</b> icon in Safari, then <b>Add to Home Screen</b>.</span>
+                      </span>
+                    ) : (
+                      <span>Your browser didn't offer an install prompt. Use its menu → <b>Install app</b> / <b>Add to Home screen</b>. (Requires HTTPS — works on the deployed site.)</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="bg-slate-50 dark:bg-[#0F1115]/50 p-4 rounded-xl border border-slate-200 dark:border-slate-800/80 space-y-2">
                 <div className="flex items-center space-x-1.5 text-[10px] text-amber-500 uppercase font-bold">
                   <Sliders className="w-3.5 h-3.5" />
