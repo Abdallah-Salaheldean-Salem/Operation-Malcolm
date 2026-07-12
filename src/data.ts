@@ -3,8 +3,8 @@ import { Project, IdeaItem, ModuleReadiness } from "./types";
 export const INITIAL_PROJECTS: Project[] = [
   {
     id: "proj-innovation-hub",
-    name: "💻 Code of Innovation Hub",
-    description: "Master workspace for tracking the design, electronics, fabrication, and smart systems of the Innovation Hub.",
+    name: "💻 Code of Operation Malcolm",
+    description: "Master workspace for tracking the design, electronics, fabrication, and smart systems of the Operation Malcolm.",
     tags: [],
     modules: [
       { id: "mod-electronics", name: "Electronics", icon: "🔌", color: "#6366f1", owner: "Abdallah", readiness: "prototype" },
@@ -16,11 +16,11 @@ export const INITIAL_PROJECTS: Project[] = [
     goals: [
       {
         id: "goal-demo",
-        title: "Deliver a working Innovation Hub demo build",
+        title: "Deliver a working Operation Malcolm demo build",
         specific: "Integrate the electronics, firmware, and fabricated chassis into one demoable unit.",
         measurable: "All 5 modules reach at least 'Integrated' readiness and 90% of tasks complete.",
         achievable: "Current team of 3 with existing hardware; no new procurement required.",
-        relevant: "Needed for the end-of-term Innovation Hub showcase.",
+        relevant: "Needed for the end-of-term Operation Malcolm showcase.",
         timeBound: "2026-08-15",
         progress: 40,
       },
@@ -411,7 +411,7 @@ export const INITIAL_PROJECTS: Project[] = [
     tasks: [
 {
             "id": "TASK-003",
-            "title": "Innovation Hub Visualizer Kit",
+            "title": "Operation Malcolm Visualizer Kit",
             "description": "",
             "status": "col-done",
             "priority": "medium",
@@ -1167,7 +1167,7 @@ export const INITIAL_PROJECTS: Project[] = [
       },
             {
         "id": "TASK-003",
-        "title": "Innovation Hub Visualizer Kit",
+        "title": "Operation Malcolm Visualizer Kit",
         "description": "",
         "status": "col-done",
         "priority": "medium",
@@ -1673,7 +1673,7 @@ export const INITIAL_PROJECTS: Project[] = [
   },
 {
   "id": "proj-innovation-hub-sync",
-  "name": "Sync Data - Innovation Hub",
+  "name": "Sync Data - Operation Malcolm",
   "description": "Tasks synced from CSV.",
   "tags": [],
   "modules": [],
@@ -1706,7 +1706,7 @@ export const INITIAL_PROJECTS: Project[] = [
   "tasks": [
     {
       "id": "TASK-003",
-      "title": "Innovation Hub Visualizer Kit",
+      "title": "Operation Malcolm Visualizer Kit",
       "description": "",
       "status": "col-done",
       "priority": "medium",

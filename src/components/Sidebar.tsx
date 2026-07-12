@@ -152,7 +152,7 @@ export default function Sidebar({
           className="w-8 h-8 rounded-lg shadow-md shrink-0"
         />
         <div>
-          <h1 className="font-semibold text-slate-900 dark:text-white tracking-wide text-sm line-clamp-1" title="Innovation Hub Visualizer Kit">Innovation Hub Visualizer Kit</h1>
+          <h1 className="font-semibold text-slate-900 dark:text-white tracking-wide text-sm line-clamp-1" title="Operation Malcolm Visualizer Kit">Operation Malcolm Visualizer Kit</h1>
         </div>
       </div>
 

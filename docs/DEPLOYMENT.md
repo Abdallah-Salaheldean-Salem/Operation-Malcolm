@@ -23,7 +23,7 @@ The project relies on external APIs (such as Gemini for AI reporting and Supabas
 The project requires the following environment variables:
 - `GEMINI_API_KEY`: Required for Gemini AI API calls (project reports).
 - `APP_URL`: The URL where this applet is hosted.
-- `VITE_SUPABASE_URL`: Your Supabase project URL. *Optional* — the app falls back to the shared Innovation Hub project baked into `src/lib/supabase.ts`, so the shared workspace works with zero configuration.
+- `VITE_SUPABASE_URL`: Your Supabase project URL. *Optional* — the app falls back to the shared Operation Malcolm project baked into `src/lib/supabase.ts`, so the shared workspace works with zero configuration.
 - `VITE_SUPABASE_ANON_KEY`: Your Supabase publishable (anon) key. *Optional*, same fallback as above. This key is safe to expose client-side; access is governed by Row Level Security.
 
 **Shared workspace note**: the app treats Supabase as the shared source of truth — every visitor sees and edits the same workspace (there is no login). Edits are pushed automatically a moment after each change, and the app pulls the latest data on load and whenever the tab regains focus.

@@ -136,7 +136,7 @@ export default function SettingsView({ project, onUpdateProject, onResetWorkspac
           </div>
 
           <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#1C1F26]/30 text-[10px] text-slate-500 dark:text-slate-400 text-center">
-            🔒 Code of Innovation Hub Workspace Security v1.0
+            🔒 Code of Operation Malcolm Workspace Security v1.0
           </div>
         </div>
 

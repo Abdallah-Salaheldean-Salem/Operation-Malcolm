@@ -589,7 +589,7 @@ export default function App() {
             </button>
             <div className="flex items-center space-x-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
               <LayoutGrid className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-              <span className="text-slate-800 dark:text-slate-200 hidden sm:block truncate">Innovation Hub Project Tracker Dashboard</span>
+              <span className="text-slate-800 dark:text-slate-200 hidden sm:block truncate">Operation Malcolm Project Tracker Dashboard</span>
             </div>
             
             {/* Workspace quick selector */}

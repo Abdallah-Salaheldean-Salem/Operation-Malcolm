@@ -1,9 +1,9 @@
 # System Architecture
 
-This document serves as the master blueprint for the Innovation Hub task management workspace. It explains how the project is built, why specific technical choices were made, and how the different pieces fit together.
+This document serves as the master blueprint for the Operation Malcolm task management workspace. It explains how the project is built, why specific technical choices were made, and how the different pieces fit together.
 
 ## 1. System Overview
-The application is a comprehensive, multi-view task management workspace designed for teams like the Code of Innovation Hub. It provides a unified data model that can be visualized and manipulated through multiple lenses: List, Kanban Board, Team Workload, Gantt Timeline, Eisenhower Matrix (Ideas), and Daily Activity Logs. The system is designed to be highly responsive, primarily functioning as a local-first application with remote synchronization, and it leverages AI for automated project reporting.
+The application is a comprehensive, multi-view task management workspace designed for teams like the Code of Operation Malcolm. It provides a unified data model that can be visualized and manipulated through multiple lenses: List, Kanban Board, Team Workload, Gantt Timeline, Eisenhower Matrix (Ideas), and Daily Activity Logs. The system is designed to be highly responsive, primarily functioning as a local-first application with remote synchronization, and it leverages AI for automated project reporting.
 
 ## 2. Tech Stack
 - **Frontend**: React 19, TypeScript, Tailwind CSS, Lucide React (Icons)

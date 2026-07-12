@@ -1,6 +1,6 @@
 # Strategic Roadmap
 
-This document serves as the strategic compass for the Code of Innovation Hub task management workspace. It dictates the project's future timeline, feature prioritization, and long-term vision to ensure alignment and focused development efforts.
+This document serves as the strategic compass for the Code of Operation Malcolm task management workspace. It dictates the project's future timeline, feature prioritization, and long-term vision to ensure alignment and focused development efforts.
 
 ## 1. Strategic Vision and Goals
 Over the next 6 to 12 months, our objective is to mature this workspace from a single-user rapid prototyping tool into a fully-fledged, multiplayer collaborative environment. We aim to bridge the gap between high-level strategic planning (Eisenhower Matrix, Gantt) and day-to-day execution (Kanban, Activity Logs) for distributed engineering and fabrication teams.

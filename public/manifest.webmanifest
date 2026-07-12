@@ -1,6 +1,6 @@
 {
-  "name": "Innovation Hub Workspace",
-  "short_name": "Innovation Hub",
+  "name": "Operation Malcolm Workspace",
+  "short_name": "Operation Malcolm",
   "description": "Multi-view project tracker: Kanban board, Gantt timeline, calendar, team workload, daily logs and idea matrix.",
   "start_url": "/",
   "display": "standalone",
@@ -21,7 +21,8 @@
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

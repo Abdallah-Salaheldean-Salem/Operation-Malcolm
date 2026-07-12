@@ -1,6 +1,6 @@
-# Innovation Hub Task Management Workspace
+# Operation Malcolm Task Management Workspace
 
-The Code of Innovation Hub task management workspace is a comprehensive, multi-view productivity application designed to streamline team collaboration, project tracking, and workload management. It solves the fragmentation of project management tools by providing a unified data model that can be visualized and manipulated through multiple lenses—all while maintaining blazing-fast performance through a local-first architecture and background synchronization.
+The Code of Operation Malcolm task management workspace is a comprehensive, multi-view productivity application designed to streamline team collaboration, project tracking, and workload management. It solves the fragmentation of project management tools by providing a unified data model that can be visualized and manipulated through multiple lenses—all while maintaining blazing-fast performance through a local-first architecture and background synchronization.
 
 [**View the Live Application on Vercel**](https://your-vercel-deployment-link.vercel.app)
 
@@ -70,5 +70,5 @@ For a deeper understanding of the project's inner workings, deployment, and futu
 This project is licensed under the MIT License.
 
 **Maintainers:**
-- Abdallah Salaheldean (Innovation Hub Lead) - abdallah.salaheldean@gmail.com
-- Sallam (Innovation Hub Engineer ) - mohamedsallam899@gmail.com
+- Abdallah Salaheldean (Operation Malcolm Lead) - abdallah.salaheldean@gmail.com
+- Sallam (Operation Malcolm Engineer ) - mohamedsallam899@gmail.com

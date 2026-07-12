@@ -1,6 +1,6 @@
 {
   "name": "Remix: Task Manager_v1_phone_app",
-  "description": "The Code of Innovation Hub task management workspace, featuring interactive views (List, Board, Team allocation, Gantt schedules, Strategic Backlog), automatic audit logs, and AI-powered project reporting.",
+  "description": "The Code of Operation Malcolm task management workspace, featuring interactive views (List, Board, Team allocation, Gantt schedules, Strategic Backlog), automatic audit logs, and AI-powered project reporting.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

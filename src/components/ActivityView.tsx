@@ -25,7 +25,7 @@ const INITIAL_LOGS: DailyLog[] = [
     id: "log-1",
     date: "2026-06-19",
     taskId: "TASK-003",
-    taskTitle: "Innovation Hub Visualizer Kit",
+    taskTitle: "Operation Malcolm Visualizer Kit",
     description: "Logged from Daily Logs board",
     status: "Completed",
     time: "09:00 AM",
