@@ -218,25 +218,39 @@ export default function CalendarView({
     setDraggedOverDate(null);
   };
 
+  const scheduleTask = (taskId: string, dateStr: string) => {
+    const task = project.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const updatedTask = {
+      ...task,
+      startDate: task.startDate || dateStr,
+      dueDate: dateStr,
+    };
+    onUpdateProject({
+      ...project,
+      tasks: project.tasks.map((t) => (t.id === taskId ? updatedTask : t)),
+    });
+  };
+
   const handleDrop = (e: React.DragEvent, dateStr: string) => {
     e.preventDefault();
     setDraggedOverDate(null);
     const taskId = e.dataTransfer.getData("text/plain");
     if (!taskId) return;
+    scheduleTask(taskId, dateStr);
+  };
 
-    const task = project.tasks.find((t) => t.id === taskId);
-    if (task) {
-      const updatedTask = {
-        ...task,
-        startDate: task.startDate || dateStr,
-        dueDate: dateStr,
-      };
+  // Tap-to-schedule (touch devices can't use HTML5 drag & drop): arm a
+  // backlog task, then tap a calendar day to place it.
+  const [armedTaskId, setArmedTaskId] = useState<string | null>(null);
+  const armedTask = armedTaskId
+    ? project.tasks.find((t) => t.id === armedTaskId)
+    : null;
 
-      onUpdateProject({
-        ...project,
-        tasks: project.tasks.map((t) => (t.id === taskId ? updatedTask : t)),
-      });
-    }
+  const handleCellTap = (dateStr: string) => {
+    if (!armedTaskId) return;
+    scheduleTask(armedTaskId, dateStr);
+    setArmedTaskId(null);
   };
 
   const isToday = (date: Date) => {
@@ -314,6 +328,21 @@ export default function CalendarView({
           </div>
         </div>
 
+        {/* Tap-to-schedule banner */}
+        {armedTask && (
+          <div className="mb-3 flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl bg-indigo-600 text-white shadow-[0_4px_16px_rgba(79,70,229,0.35)]">
+            <span className="text-xs font-bold truncate">
+              Tap a day to schedule “{armedTask.title}”
+            </span>
+            <button
+              onClick={() => setArmedTaskId(null)}
+              className="shrink-0 text-[11px] font-black uppercase tracking-wide bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Calendar Grid Container */}
         <div className="flex-1 overflow-x-auto overflow-y-hidden bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl shadow-xs flex flex-col">
           <div className="flex-1 flex flex-col min-w-[700px]">
@@ -342,13 +371,14 @@ export default function CalendarView({
                   onDragOver={(e) => handleDragOver(e, dateStr)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, dateStr)}
+                  onClick={() => handleCellTap(dateStr)}
                   className={`relative flex flex-col h-full border-r border-b border-slate-200 dark:border-[#1E222B] [nth-child(7n)]:border-r-0 group transition-all overflow-hidden ${
-                    isCurrentMonth 
-                      ? "bg-white dark:bg-[#14171C]" 
+                    isCurrentMonth
+                      ? "bg-white dark:bg-[#14171C]"
                       : "bg-slate-50/50 dark:bg-[#0D0F13]/40 text-slate-500 dark:text-slate-400 dark:text-slate-600"
                   } ${isTodayCell ? "bg-indigo-50/20 dark:bg-indigo-500/5" : ""} ${
                     isDragOver ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/30 z-10" : ""
-                  }`}
+                  } ${armedTaskId ? "cursor-pointer hover:bg-indigo-500/10 active:bg-indigo-500/20" : ""}`}
                 >
                   {/* Cell Header: Date label and Quick "+" task creation trigger */}
                   <div className="flex items-center justify-between p-1.5 select-none shrink-0">
@@ -366,9 +396,12 @@ export default function CalendarView({
 
                     {/* Quick "+" add button on hover */}
                     <button
-                      onClick={() => onOpenTaskModal(null, undefined, { startDate: dateStr, dueDate: dateStr })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenTaskModal(null, undefined, { startDate: dateStr, dueDate: dateStr });
+                      }}
                       title="Schedule new task on this date"
-                      className="opacity-0 group-hover:opacity-100 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-all cursor-pointer"
+                      className="opacity-60 md:opacity-0 md:group-hover:opacity-100 p-1 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded transition-all cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -381,7 +414,10 @@ export default function CalendarView({
                         key={task.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, task.id)}
-                        onClick={() => onOpenTaskModal(task)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenTaskModal(task);
+                        }}
                         style={{ borderLeftColor: getStatusBorderColor(task.status) }}
                         className={`text-[10px] font-medium py-1 px-1.5 rounded-md border-l-2 border-y border-r border-slate-200 dark:border-[#1E222B]/75 flex flex-col space-y-0.5 cursor-grab active:cursor-grabbing hover:brightness-95 dark:hover:brightness-110 transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${getPriorityBadgeStyles(
                           task.priority
@@ -429,7 +465,7 @@ export default function CalendarView({
           <div className="p-3 bg-indigo-500/5 border-b border-slate-200 dark:border-[#1E222B] flex items-start space-x-2">
             <Info className="w-3.5 h-3.5 text-indigo-500 mt-0.5 flex-shrink-0" />
             <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400">
-              Drag tasks from this backlog list and drop them onto any calendar day cell to instantly schedule them.
+              Drag a task onto any calendar day — or tap its Schedule button, then tap the target day.
             </p>
           </div>
 
@@ -453,8 +489,10 @@ export default function CalendarView({
                   onDragStart={(e) => handleDragStart(e, task.id)}
                   onClick={() => onOpenTaskModal(task)}
                   style={{ borderLeftColor: getStatusBorderColor(task.status) }}
-                  className="bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] rounded-xl p-3 border-l-4 hover:border-indigo-500/30 dark:hover:border-indigo-500/20 transition-all cursor-grab active:cursor-grabbing group hover:shadow-xs flex flex-col space-y-2"
-                  title="Drag this item onto the calendar stage to schedule it"
+                  className={`bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] rounded-xl p-3 border-l-4 hover:border-indigo-500/30 dark:hover:border-indigo-500/20 transition-all cursor-grab active:cursor-grabbing group hover:shadow-xs flex flex-col space-y-2 ${
+                    armedTaskId === task.id ? "ring-2 ring-indigo-500" : ""
+                  }`}
+                  title="Drag onto the calendar, or tap Schedule and then a day"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[9px] font-mono font-extrabold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">
@@ -480,10 +518,19 @@ export default function CalendarView({
                       {task.assignee || "Unassigned"}
                     </span>
 
-                    <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-0.5 hover:translate-x-0.5 transition-transform">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setArmedTaskId(task.id);
+                        // On phones the drawer covers the grid — close it so
+                        // the user can tap a day.
+                        if (window.innerWidth < 768) setShowUnscheduled(false);
+                      }}
+                      className="text-[10px] font-black text-white bg-indigo-600 hover:bg-indigo-500 flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                    >
                       <span>Schedule</span>
                       <ArrowRight className="w-3 h-3" />
-                    </span>
+                    </button>
                   </div>
                 </div>
               ))
