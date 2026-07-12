@@ -2,12 +2,15 @@
 // Provides installability (Add to Home Screen / Android install prompt) and
 // basic offline support for the app shell. Cross-origin requests (e.g. the
 // Supabase API) are ignored so live data is never served stale.
-const CACHE = 'operation-malcolm-v1';
+const CACHE = 'operation-malcolm-v2';
 const CORE = [
   '/',
   '/index.html',
   '/manifest.webmanifest',
+  '/favicon.ico',
   '/icon.svg',
+  '/icon-16.png',
+  '/icon-32.png',
   '/icon-192.png',
   '/icon-512.png',
 ];
