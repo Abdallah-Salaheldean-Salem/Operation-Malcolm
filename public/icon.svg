@@ -1,7 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#4F46E5"/>
-  <rect x="104" y="104" width="140" height="140" rx="28" fill="#ffffff" opacity="0.95"/>
-  <rect x="268" y="104" width="140" height="140" rx="28" fill="#ffffff" opacity="0.55"/>
-  <rect x="104" y="268" width="140" height="140" rx="28" fill="#ffffff" opacity="0.55"/>
-  <rect x="268" y="268" width="140" height="140" rx="28" fill="#ffffff" opacity="0.95"/>
+  <defs>
+    <clipPath id="round"><rect width="512" height="512" rx="104"/></clipPath>
+  </defs>
+  <g clip-path="url(#round)">
+    <rect width="512" height="512" fill="#3a2178"/>
+
+    <!-- concentric rings -->
+    <g fill="none" stroke-linecap="round">
+      <circle cx="256" cy="252" r="238" stroke="#bf3b33" stroke-width="6"/>
+      <circle cx="256" cy="252" r="216" stroke="#bf3b33" stroke-width="6"/>
+      <circle cx="256" cy="252" r="196" stroke="#4aa7bd" stroke-width="9"/>
+      <circle cx="256" cy="300" r="120" stroke="#4aa7bd" stroke-width="8"/>
+      <circle cx="256" cy="300" r="98"  stroke="#bf3b33" stroke-width="8"/>
+    </g>
+
+    <!-- crest -->
+    <g fill="#bf3b33">
+      <!-- raised feathered wings (right half, mirrored) -->
+      <g id="wing">
+        <path d="M244 300 Q344 248 434 224 Q356 286 262 308 Z"/>
+        <path d="M246 314 Q350 296 446 276 Q360 314 260 332 Z"/>
+        <path d="M250 328 Q338 334 406 352 Q346 358 262 354 Z"/>
+      </g>
+      <use href="#wing" transform="matrix(-1 0 0 1 512 0)"/>
+
+      <!-- top spike -->
+      <path d="M256 52 L269 140 L256 118 L243 140 Z"/>
+      <!-- central mask/head -->
+      <path d="M256 112 L298 196 L284 302 L256 336 L228 302 L214 196 Z"/>
+      <!-- downward blade -->
+      <path d="M256 300 L276 370 L256 458 L236 370 Z"/>
+    </g>
+
+    <!-- eye slits (negative space) -->
+    <g fill="#3a2178">
+      <path d="M240 222 L259 236 L247 258 Z"/>
+      <path d="M272 222 L253 236 L265 258 Z"/>
+    </g>
+  </g>
 </svg>
