@@ -35,6 +35,7 @@ import {
   Users,
   Sun,
   Moon,
+  Settings,
   ListTodo,
   Kanban,
   CalendarDays,
@@ -627,6 +628,17 @@ export default function App() {
               className="p-2 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-[#1C2027] transition-colors"
             >
               {theme === "dark" ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
+            </button>
+            <button
+              onClick={() => setActiveView("settings")}
+              title="Workspace settings"
+              className={`p-2 rounded-full transition-colors ${
+                activeView === "settings"
+                  ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10"
+                  : "text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-[#1C2027]"
+              }`}
+            >
+              <Settings className="w-5 h-5" />
             </button>
             <button
               onClick={() => handleOpenTaskModal(null)}
