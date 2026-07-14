@@ -23,6 +23,7 @@ import {
   BarChart2,
   Info,
   Clock,
+  X,
 } from "lucide-react";
 
 interface KanbanBoardProps {
@@ -33,6 +34,7 @@ interface KanbanBoardProps {
   globalPriority?: string;
   globalAssignee?: string;
   globalStatus?: string;
+  onClearFilter?: (field: "search" | "priority" | "assignee" | "status") => void;
 }
 
 export default function KanbanBoard({
@@ -43,6 +45,7 @@ export default function KanbanBoard({
   globalPriority,
   globalAssignee,
   globalStatus,
+  onClearFilter,
 }: KanbanBoardProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -255,11 +258,71 @@ export default function KanbanBoard({
   // Retrieve unique assignees list in this project for filtering
   const projectAssignees = Array.from(new Set(project.tasks.map((t) => t.assignee || "Unassigned")));
 
+  // Live completion for the (filtered) board.
+  const completionPct =
+    totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : 0;
+
+  // Active shared-filter chips (removable). Empty text / "all" = inactive.
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const statusTitle = globalStatus
+    ? project.columns.find((c) => c.id === globalStatus)?.title || globalStatus
+    : "";
+  const activeFilterChips = [
+    (globalSearch || "").trim()
+      ? { field: "search" as const, label: `“${(globalSearch || "").trim()}”` }
+      : null,
+    globalPriority && globalPriority !== "all"
+      ? { field: "priority" as const, label: `Priority: ${cap(globalPriority)}` }
+      : null,
+    globalAssignee && globalAssignee !== "all"
+      ? { field: "assignee" as const, label: `Assignee: ${globalAssignee}` }
+      : null,
+    globalStatus && globalStatus !== "all"
+      ? { field: "status" as const, label: `Status: ${statusTitle}` }
+      : null,
+  ].filter(Boolean) as { field: "search" | "priority" | "assignee" | "status"; label: string }[];
+
   return (
     <div id="kanban-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1">
       {/* Board Top Toolbar */}
       <div id="kanban-toolbar" className="p-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-<div />
+        {/* Live board stats + active-filter chips */}
+        <div id="kanban-board-summary" className="flex flex-wrap items-center gap-1.5 min-w-0 text-[11px] font-semibold">
+          <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] text-slate-700 dark:text-slate-300">
+            {totalTasksCount} {totalTasksCount === 1 ? "task" : "tasks"}
+          </span>
+          <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400">
+            {inProgressTasksCount} in progress
+          </span>
+          {blockedTasksCount > 0 && (
+            <span className="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400">
+              {blockedTasksCount} blocked
+            </span>
+          )}
+          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+            <span className="hidden sm:inline-block w-10 h-1.5 rounded-full bg-emerald-500/20 overflow-hidden align-middle">
+              <span className="block h-full bg-emerald-500 rounded-full" style={{ width: `${completionPct}%` }} />
+            </span>
+            {completionPct}% complete
+          </span>
+
+          {activeFilterChips.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1.5 sm:pl-2 sm:ml-0.5 sm:border-l border-slate-200 dark:border-[#1E222B]">
+              {activeFilterChips.map((chip) => (
+                <button
+                  key={chip.field}
+                  type="button"
+                  onClick={() => onClearFilter?.(chip.field)}
+                  title="Clear this filter"
+                  className="group flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/25 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-500/20 transition-colors cursor-pointer max-w-[180px]"
+                >
+                  <span className="truncate">{chip.label}</span>
+                  <X className="w-3 h-3 shrink-0 opacity-70 group-hover:opacity-100" />
+                </button>
+              ))}
+            </span>
+          )}
+        </div>
 
         {/* Action button */}
         <div className="flex items-center space-x-3">

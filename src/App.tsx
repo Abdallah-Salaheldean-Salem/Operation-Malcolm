@@ -1040,6 +1040,12 @@ export default function App() {
               globalPriority={globalPriority}
               globalAssignee={globalAssignee}
               globalStatus={globalStatus}
+              onClearFilter={(field) => {
+                if (field === "search") setGlobalSearch("");
+                else if (field === "priority") setGlobalPriority("all");
+                else if (field === "assignee") setGlobalAssignee("all");
+                else if (field === "status") setGlobalStatus("all");
+              }}
             />
           )}
 
