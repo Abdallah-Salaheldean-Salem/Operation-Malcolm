@@ -250,55 +250,7 @@ export default function KanbanBoard({
     <div id="kanban-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1">
       {/* Board Top Toolbar */}
       <div id="kanban-toolbar" className="p-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1 min-w-0">
-          <div className="relative flex-1 min-w-[140px]">
-            <Search className="w-4 h-4 text-slate-500 dark:text-slate-400 absolute left-3 top-2.5" />
-            <input
-              id="kanban-search-input"
-              type="text"
-              placeholder="Search tasks..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-[#1C1F26] border border-slate-200 dark:border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-            />
-          </div>
-
-          {/* Priority filter */}
-          <div className="flex items-center space-x-1">
-            <Filter className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            <select
-              id="kanban-priority-filter"
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-              className="bg-slate-50 dark:bg-[#1C1F26] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Priorities</option>
-              {PRIORITIES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Assignee filter */}
-          <div className="flex items-center space-x-1">
-            <Users className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            <select
-              id="kanban-assignee-filter"
-              value={assigneeFilter}
-              onChange={(e) => setAssigneeFilter(e.target.value)}
-              className="bg-slate-50 dark:bg-[#1C1F26] border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-            >
-              <option value="all">All Assignees</option>
-              {projectAssignees.map((assignee) => (
-                <option key={assignee} value={assignee}>
-                  {assignee}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+<div />
 
         {/* Action button */}
         <div className="flex items-center space-x-3">
