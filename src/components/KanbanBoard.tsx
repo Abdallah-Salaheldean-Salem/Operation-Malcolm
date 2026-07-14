@@ -75,18 +75,27 @@ export default function KanbanBoard({
 
   const presetColors = ["#64748b", "#3b82f6", "#f59e0b", "#ef4444", "#10b981", "#6366f1", "#a855f7"];
 
-  const activeSearch = globalSearch !== undefined ? globalSearch : searchTerm;
-  const activePriority = globalPriority !== undefined ? globalPriority : priorityFilter;
-  const activeAssignee = globalAssignee !== undefined ? globalAssignee : assigneeFilter;
+  // The board reads BOTH the shared top-bar filters and its own inline
+  // controls, applying them together — a task must satisfy both. Empty text
+  // and "all" match everything, so an unused control never hides anything.
+  const textMatches = (task: Task, term?: string) => {
+    const q = (term || "").trim().toLowerCase();
+    if (!q) return true;
+    return (
+      task.title.toLowerCase().includes(q) ||
+      (task.description || "").toLowerCase().includes(q) ||
+      task.id.toLowerCase().includes(q)
+    );
+  };
+  const priorityMatches = (task: Task, val?: string) => !val || val === "all" || task.priority === val;
+  const assigneeMatches = (task: Task, val?: string) =>
+    !val || val === "all" || (task.assignee || "Unassigned") === val;
 
   // Filter tasks
   const filteredTasks = project.tasks.filter((task) => {
-    const matchesSearch =
-      task.title.toLowerCase().includes(activeSearch.toLowerCase()) ||
-      task.description.toLowerCase().includes(activeSearch.toLowerCase()) ||
-      task.id.toLowerCase().includes(activeSearch.toLowerCase());
-    const matchesPriority = activePriority === "all" || task.priority === activePriority;
-    const matchesAssignee = activeAssignee === "all" || task.assignee === activeAssignee;
+    const matchesSearch = textMatches(task, globalSearch) && textMatches(task, searchTerm);
+    const matchesPriority = priorityMatches(task, globalPriority) && priorityMatches(task, priorityFilter);
+    const matchesAssignee = assigneeMatches(task, globalAssignee) && assigneeMatches(task, assigneeFilter);
     const matchesStatus = globalStatus === undefined || globalStatus === "all" || task.status === globalStatus;
     return matchesSearch && matchesPriority && matchesAssignee && matchesStatus;
   });
