@@ -13,7 +13,19 @@ import CalendarView from "./components/CalendarView";
 import SettingsView from "./components/SettingsView";
 import ModulesView from "./components/ModulesView";
 import TaskModal from "./components/TaskModal";
-import { 
+import AccessModal, { AccessModalMode } from "./components/AccessModal";
+import { fetchAppState, saveAppState } from "./lib/supabase-sync";
+import {
+  loadAccess,
+  persistAccess,
+  hashPassword,
+  isAdminPassword,
+  canAccess,
+  hasPassword,
+  AccessState,
+  SpaceSecurity,
+} from "./lib/access";
+import {
   LayoutGrid, 
   Undo2, 
   Redo2, 
@@ -39,7 +51,10 @@ import {
   ListTodo,
   Kanban,
   CalendarDays,
-  Lightbulb
+  Lightbulb,
+  Lock,
+  ShieldCheck,
+  ShieldQuestion
 } from "lucide-react";
 
 // ClickUp-style Space accent colors offered in the sidebar picker.
@@ -88,6 +103,99 @@ export default function App() {
   const [globalPriority, setGlobalPriority] = useState("all");
   const [globalAssignee, setGlobalAssignee] = useState("all");
   const [globalStatus, setGlobalStatus] = useState("all");
+
+  // --- Workspace access control (client-side soft gate) ---
+  const [access, setAccessState] = useState<AccessState>(() => loadAccess());
+  const accessRef = useRef(access);
+  const [spaceSecurity, setSpaceSecurity] = useState<SpaceSecurity>({});
+  const spaceSecurityRef = useRef<SpaceSecurity>({});
+  const [accessModal, setAccessModal] = useState<
+    { mode: AccessModalMode; spaceName?: string; onSubmit: (pw: string) => Promise<string | null> } | null
+  >(null);
+  const pendingAfterModal = useRef<null | (() => void)>(null);
+
+  useEffect(() => {
+    accessRef.current = access;
+    persistAccess(access);
+  }, [access]);
+
+  // Load the shared space password map on start.
+  useEffect(() => {
+    fetchAppState("space_security").then((res) => {
+      if (res.ok && res.value && typeof res.value === "object") {
+        const map = res.value as SpaceSecurity;
+        spaceSecurityRef.current = map;
+        setSpaceSecurity(map);
+      }
+    });
+  }, []);
+
+  const grantAdmin = () => {
+    accessRef.current = { ...accessRef.current, admin: true };
+    setAccessState({ ...accessRef.current });
+  };
+  const unlockSpace = (id: string) => {
+    if (accessRef.current.unlocked.includes(id)) return;
+    accessRef.current = { ...accessRef.current, unlocked: [...accessRef.current.unlocked, id] };
+    setAccessState({ ...accessRef.current });
+  };
+  const lockEverything = () => {
+    accessRef.current = { admin: false, unlocked: [] };
+    setAccessState({ admin: false, unlocked: [] });
+  };
+  const setSpacePassword = async (id: string, pw: string) => {
+    const h = await hashPassword(pw);
+    const next = { ...spaceSecurityRef.current, [id]: h };
+    spaceSecurityRef.current = next;
+    setSpaceSecurity(next);
+    await saveAppState("space_security", next);
+  };
+  const closeAccessModal = () => {
+    setAccessModal(null);
+    const p = pendingAfterModal.current;
+    pendingAfterModal.current = null;
+    if (p) setTimeout(p, 0);
+  };
+  // Prompt for admin, running `next` once granted (or immediately if already admin).
+  const requireAdmin = (next: () => void) => {
+    if (accessRef.current.admin) {
+      next();
+      return;
+    }
+    setAccessModal({
+      mode: "admin",
+      onSubmit: async (pw) => {
+        if (await isAdminPassword(pw)) {
+          grantAdmin();
+          pendingAfterModal.current = next;
+          return null;
+        }
+        return "Incorrect admin password.";
+      },
+    });
+  };
+  const promptUnlock = (id: string, onOpen?: () => void) => {
+    setAccessModal({
+      mode: "unlock",
+      spaceName: projects.find((p) => p.id === id)?.name,
+      onSubmit: async (pw) => {
+        if (await isAdminPassword(pw)) {
+          grantAdmin();
+          pendingAfterModal.current = onOpen || null;
+          return null;
+        }
+        const h = await hashPassword(pw);
+        if (spaceSecurityRef.current[id] && h === spaceSecurityRef.current[id]) {
+          unlockSpace(id);
+          pendingAfterModal.current = onOpen || null;
+          return null;
+        }
+        return spaceSecurityRef.current[id]
+          ? "Incorrect password."
+          : "This space has no password yet — only an admin can open it.";
+      },
+    });
+  };
 
   // Theme State
   const [theme, setTheme] = useState<"dark" | "light">(() => {
@@ -236,13 +344,37 @@ export default function App() {
   };
   walkSpaces(undefined, 0);
 
-  const handleSelectProject = (id: string) => {
+  const doSelectProject = (id: string) => {
     setActiveProjectId(id);
     setSelectedTask(null);
+  };
+  const handleSelectProject = (id: string) => {
+    if (canAccess(id, accessRef.current, spaceSecurityRef.current)) {
+      doSelectProject(id);
+    } else {
+      promptUnlock(id, () => doSelectProject(id));
+    }
   };
 
   // Create Project Space (optionally nested under a parent = sub-space)
   const handleCreateProject = (name: string, desc: string, parentId?: string) => {
+    // Creating a space is admin-only; on success prompt for the new space's
+    // password so it's protected from the start.
+    requireAdmin(() => {
+      const newId = doCreateProject(name, desc, parentId);
+      unlockSpace(newId);
+      setAccessModal({
+        mode: "setpw",
+        spaceName: name,
+        onSubmit: async (pw) => {
+          await setSpacePassword(newId, pw);
+          return null;
+        },
+      });
+    });
+  };
+
+  const doCreateProject = (name: string, desc: string, parentId?: string): string => {
     // Push old state to undo
     setUndoStack((prev) => [...prev, projects]);
     setRedoStack([]);
@@ -275,6 +407,7 @@ export default function App() {
     };
     setProjects([...projects, newProj]);
     setActiveProjectId(newProj.id);
+    return newProj.id;
   };
 
   // A Space plus all of its descendant sub-spaces (for cascading actions)
@@ -295,11 +428,24 @@ export default function App() {
 
   // Delete a Space and its sub-spaces
   const handleDeleteProject = (id: string) => {
+    requireAdmin(() => doDeleteProject(id));
+  };
+
+  const doDeleteProject = (id: string) => {
     const ids = collectSubtreeIds(id);
     const remaining = projects.filter((p) => !ids.includes(p.id));
     if (remaining.length === 0) return; // never delete the last Space
     setUndoStack((prev) => [...prev, projects]);
     setRedoStack([]);
+
+    // Drop the removed spaces' passwords from the shared security map.
+    if (ids.some((rid) => spaceSecurityRef.current[rid])) {
+      const nextSec = { ...spaceSecurityRef.current };
+      ids.forEach((rid) => delete nextSec[rid]);
+      spaceSecurityRef.current = nextSec;
+      setSpaceSecurity(nextSec);
+      saveAppState("space_security", nextSec);
+    }
 
     setProjects(remaining);
     if (ids.includes(activeProjectId)) {
@@ -1019,6 +1165,34 @@ export default function App() {
 
         {/* 5. ACTIVE DYNAMIC STAGE CONTAINER */}
         <div id="workspace-dynamic-view-container" className="flex-1 overflow-hidden bg-slate-50 dark:bg-[#0F1115]">
+          {!canAccess(activeProjectId, access, spaceSecurity) ? (
+            <div className="h-full flex flex-col items-center justify-center text-center px-6 select-none">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-500 dark:text-indigo-400 mb-4">
+                <Lock className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">“{activeProject?.name}” is locked</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-xs leading-relaxed">
+                {hasPassword(activeProjectId, spaceSecurity)
+                  ? "Enter this space's password to view and edit it. The admin password also works."
+                  : "This space has no password yet — only an admin can open it and set one."}
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-5">
+                <button
+                  onClick={() => promptUnlock(activeProjectId)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <Lock className="w-3.5 h-3.5" /> Unlock space
+                </button>
+                <button
+                  onClick={() => setIsSidebarOpen(true)}
+                  className="px-4 py-2 bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-100 dark:hover:bg-[#1C2027] transition-colors"
+                >
+                  Switch space
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
           {activeView === "list" && (
             <ListView
               project={activeProject}
@@ -1103,7 +1277,25 @@ export default function App() {
               project={activeProject}
               onUpdateProject={handleUpdateProject}
               onResetWorkspace={handleResetWorkspace}
+              isAdmin={access.admin}
+              spaceHasPassword={hasPassword(activeProjectId, spaceSecurity)}
+              onSetSpacePassword={() =>
+                requireAdmin(() =>
+                  setAccessModal({
+                    mode: "setpw",
+                    spaceName: activeProject?.name,
+                    onSubmit: async (pw) => {
+                      await setSpacePassword(activeProjectId, pw);
+                      return null;
+                    },
+                  })
+                )
+              }
+              onAdminLogin={() => requireAdmin(() => {})}
+              onLockAll={lockEverything}
             />
+          )}
+          </>
           )}
         </div>
 
@@ -1143,6 +1335,15 @@ export default function App() {
       </main>
 
       {/* Task Creation & Detail Editor Modal popup */}
+      {accessModal && (
+        <AccessModal
+          mode={accessModal.mode}
+          spaceName={accessModal.spaceName}
+          onSubmit={accessModal.onSubmit}
+          onClose={closeAccessModal}
+        />
+      )}
+
       {isTaskModalOpen && (
         <TaskModal
           task={selectedTask}
