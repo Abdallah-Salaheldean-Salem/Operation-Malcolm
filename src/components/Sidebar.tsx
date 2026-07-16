@@ -22,6 +22,7 @@ import {
   Pencil,
   Star,
   FolderPlus,
+  KeyRound,
   Boxes,
 } from "lucide-react";
 
@@ -35,6 +36,8 @@ interface SidebarProps {
   onArchiveProject?: (id: string) => void;
   onRestoreProject?: (id: string) => void;
   onUpdateSpaceMeta?: (id: string, meta: { color?: string; icon?: string; name?: string; favorite?: boolean }) => void;
+  onSetSpacePassword?: (id: string) => void;
+  spaceHasPassword?: (id: string) => boolean;
   spaceColors?: string[];
   spaceIcons?: string[];
   activeView: AppView;
@@ -51,6 +54,8 @@ export default function Sidebar({
   onArchiveProject,
   onRestoreProject,
   onUpdateSpaceMeta,
+  onSetSpacePassword,
+  spaceHasPassword,
   spaceColors = [],
   spaceIcons = [],
   activeView,
@@ -426,6 +431,17 @@ export default function Sidebar({
                           >
                             <Copy className="w-3.5 h-3.5" />
                             <span>Duplicate Space</span>
+                          </button>
+                        )}
+
+                        {onSetSpacePassword && (
+                          <button
+                            id={`password-space-${proj.id}`}
+                            onClick={() => { onSetSpacePassword(proj.id); setMenuOpenId(null); }}
+                            className="w-full px-3 py-1.5 flex items-center space-x-2 hover:bg-slate-50 dark:hover:bg-[#1C1F26] text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white cursor-pointer"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>{spaceHasPassword?.(proj.id) ? "Change Password" : "Set Password"}</span>
                           </button>
                         )}
 

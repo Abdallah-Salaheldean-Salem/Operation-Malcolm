@@ -728,6 +728,20 @@ export default function App() {
               onArchiveProject={handleArchiveProject}
               onRestoreProject={handleRestoreProject}
               onUpdateSpaceMeta={handleUpdateSpaceMeta}
+              onSetSpacePassword={(id) =>
+                requireAdmin(() =>
+                  setAccessModal({
+                    mode: "setpw",
+                    spaceName: projects.find((p) => p.id === id)?.name,
+                    onSubmit: async (pw) => {
+                      await setSpacePassword(id, pw);
+                      unlockSpace(id);
+                      return null;
+                    },
+                  })
+                )
+              }
+              spaceHasPassword={(id) => hasPassword(id, spaceSecurity)}
               spaceColors={SPACE_COLORS}
               spaceIcons={SPACE_ICONS}
               activeView={activeView}
