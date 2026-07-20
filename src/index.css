@@ -196,3 +196,10 @@
   color: #10b981 !important;
 }
 
+
+/* Date inputs: hide the low-contrast native picker indicator; a visible
+   calendar button + the full-field click handler open the picker instead. */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+}
