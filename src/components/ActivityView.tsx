@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Project, Task } from "../types";
 import { fetchAppState, saveAppState } from "../lib/supabase-sync";
-import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronLeft, ChevronRight, Mic } from "lucide-react";
+import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic } from "lucide-react";
 
 interface ActivityViewProps {
   project: Project;
@@ -184,14 +184,6 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
   // Form states
   const [targetDate, setTargetDate] = useState("2026-06-19");
   const dateInputRef = useRef<HTMLInputElement>(null);
-  // Local YYYY-MM-DD (avoids the UTC off-by-one from toISOString()).
-  const fmtDate = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const shiftTargetDate = (days: number) => {
-    const base = targetDate ? new Date(`${targetDate}T00:00:00`) : new Date();
-    base.setDate(base.getDate() + days);
-    setTargetDate(fmtDate(base));
-  };
   const openDatePicker = () => {
     const el = dateInputRef.current as any;
     if (el?.showPicker) el.showPicker();
@@ -443,51 +435,23 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
             <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Target Schedule Date
             </label>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <input
-                  ref={dateInputRef}
-                  type="date"
-                  value={targetDate}
-                  onChange={(e) => setTargetDate(e.target.value)}
-                  onClick={openDatePicker}
-                  className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-200 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
-                />
-                <button
-                  type="button"
-                  onClick={openDatePicker}
-                  title="Open calendar"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-[#1C2027] transition-colors cursor-pointer"
-                >
-                  <Calendar className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => shiftTargetDate(-1)}
-                  title="Previous day"
-                  className="p-2 rounded-lg bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:border-indigo-500/40 transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTargetDate(fmtDate(new Date()))}
-                  title="Jump to today"
-                  className="px-2.5 py-2 rounded-lg bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-500 dark:hover:text-indigo-400 hover:border-indigo-500/40 transition-colors cursor-pointer"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => shiftTargetDate(1)}
-                  title="Next day"
-                  className="p-2 rounded-lg bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:border-indigo-500/40 transition-colors cursor-pointer"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            <div className="relative">
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={targetDate}
+                onChange={(e) => setTargetDate(e.target.value)}
+                onClick={openDatePicker}
+                className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-200 rounded-lg pl-3 pr-10 py-2 text-xs focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+              />
+              <button
+                type="button"
+                onClick={openDatePicker}
+                title="Open calendar"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 hover:bg-slate-200 dark:hover:bg-[#1C2027] transition-colors cursor-pointer"
+              >
+                <Calendar className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
