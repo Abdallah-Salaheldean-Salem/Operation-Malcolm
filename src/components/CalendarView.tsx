@@ -362,10 +362,10 @@ export default function CalendarView({
         )}
 
         {/* Calendar Grid Container */}
-        <div className="flex-1 overflow-x-auto overflow-y-hidden bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl shadow-xs flex flex-col">
+        <div className="flex-1 overflow-auto bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl shadow-xs flex flex-col">
           <div className="flex-1 flex flex-col min-w-[700px]">
             {/* Weekdays Headers */}
-            <div className="grid grid-cols-7 border-b border-slate-200 dark:border-[#1E222B] bg-slate-50 dark:bg-[#0B0D11] select-none">
+            <div className="grid grid-cols-7 border-b border-slate-200 dark:border-[#1E222B] bg-slate-50 dark:bg-[#0B0D11] select-none sticky top-0 z-10">
               {weekdayNames.map((day) => (
                 <div
                   key={day}
@@ -377,7 +377,7 @@ export default function CalendarView({
             </div>
 
             {/* Monthly Days Grid */}
-            <div className="flex-1 grid grid-cols-7 grid-rows-6">
+            <div className="flex-1 grid grid-cols-7 grid-rows-[repeat(6,minmax(6rem,1fr))]">
             {calendarCells.map(({ date, isCurrentMonth, dateStr }, idx) => {
               const dayTasks = filteredTasks.filter((t) => t.dueDate === dateStr);
               const isTodayCell = isToday(date);
