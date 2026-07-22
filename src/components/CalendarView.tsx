@@ -12,7 +12,8 @@ import {
   Info, 
   ArrowRight,
   Filter,
-  CalendarDays
+  CalendarDays,
+  X
 } from "lucide-react";
 
 interface CalendarViewProps {
@@ -36,6 +37,10 @@ export default function CalendarView({
 }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [draggedOverDate, setDraggedOverDate] = useState<string | null>(null);
+  // Day whose full task list is open in the peek popover.
+  const [dayDetail, setDayDetail] = useState<string | null>(null);
+  // Max task chips shown inline in a day cell before collapsing to "+N more".
+  const MAX_VISIBLE = 3;
   // Overlay drawer on phones — start closed there so it doesn't cover the grid
   const [showUnscheduled, setShowUnscheduled] = useState<boolean>(
     () => typeof window === "undefined" || window.innerWidth >= 768
@@ -201,6 +206,16 @@ export default function CalendarView({
 
   const calendarCells = generateCalendarCells();
 
+  // Tasks scheduled within the visible month (respects active filters).
+  const monthScheduledCount = filteredTasks.filter((t) => {
+    if (!t.dueDate) return false;
+    const d = new Date(`${t.dueDate}T00:00:00`);
+    return d.getMonth() === month && d.getFullYear() === year;
+  }).length;
+  const dayDetailTasks = dayDetail
+    ? filteredTasks.filter((t) => t.dueDate === dayDetail)
+    : [];
+
   // HTML5 Drag & Drop handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData("text/plain", taskId);
@@ -275,8 +290,11 @@ export default function CalendarView({
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-800 dark:text-white tracking-wide">
+              <h2 className="text-sm font-bold text-slate-800 dark:text-white tracking-wide flex items-center gap-2">
                 Calendar Grid
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400">
+                  {monthScheduledCount} scheduled
+                </span>
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Manage dates, schedule milestones, and drag tasks onto the interactive timeline.
@@ -364,6 +382,9 @@ export default function CalendarView({
               const dayTasks = filteredTasks.filter((t) => t.dueDate === dateStr);
               const isTodayCell = isToday(date);
               const isDragOver = draggedOverDate === dateStr;
+              const isWeekend = idx % 7 === 0 || idx % 7 === 6;
+              const visibleTasks = dayTasks.slice(0, MAX_VISIBLE);
+              const overflowCount = dayTasks.length - visibleTasks.length;
 
               return (
                 <div
@@ -374,27 +395,33 @@ export default function CalendarView({
                   onClick={() => handleCellTap(dateStr)}
                   className={`relative flex flex-col h-full border-r border-b border-slate-200 dark:border-[#1E222B] [nth-child(7n)]:border-r-0 group transition-all overflow-hidden ${
                     isCurrentMonth
-                      ? "bg-white dark:bg-[#14171C]"
-                      : "bg-slate-50/50 dark:bg-[#0D0F13]/40 text-slate-500 dark:text-slate-400 dark:text-slate-600"
-                  } ${isTodayCell ? "bg-indigo-50/20 dark:bg-indigo-500/5" : ""} ${
-                    isDragOver ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/30 z-10" : ""
+                      ? isWeekend
+                        ? "bg-slate-50/70 dark:bg-[#101318]"
+                        : "bg-white dark:bg-[#14171C]"
+                      : "bg-slate-100/60 dark:bg-[#0C0E12] text-slate-400 dark:text-slate-600"
+                  } ${isTodayCell ? "ring-2 ring-inset ring-indigo-500/60 bg-indigo-50/40 dark:bg-indigo-500/[0.07]" : ""} ${
+                    isDragOver ? "bg-indigo-500/10 border-indigo-500 ring-2 ring-indigo-500/40 z-10" : ""
                   } ${armedTaskId ? "cursor-pointer hover:bg-indigo-500/10 active:bg-indigo-500/20" : ""}`}
                 >
-                  {/* Cell Header: Date label and Quick "+" task creation trigger */}
-                  <div className="flex items-center justify-between p-1.5 select-none shrink-0">
-                    <span
-                      className={`text-xs font-mono font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                        isTodayCell
-                          ? "bg-indigo-600 text-slate-900 dark:text-white font-extrabold shadow-sm"
-                          : isCurrentMonth
-                          ? "text-slate-700 dark:text-slate-300"
-                          : "text-slate-500 dark:text-slate-400 dark:text-slate-600"
-                      }`}
-                    >
-                      {date.getDate()}
-                    </span>
+                  {/* Cell Header: date, task-count, quick add */}
+                  <div className="flex items-center justify-between px-1.5 pt-1.5 pb-1 select-none shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`text-xs font-mono font-bold w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                          isTodayCell
+                            ? "bg-indigo-600 text-white font-extrabold shadow-sm"
+                            : isCurrentMonth
+                            ? "text-slate-700 dark:text-slate-300"
+                            : "text-slate-400 dark:text-slate-600"
+                        }`}
+                      >
+                        {date.getDate()}
+                      </span>
+                      {dayTasks.length > 0 && (
+                        <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">{dayTasks.length}</span>
+                      )}
+                    </div>
 
-                    {/* Quick "+" add button on hover */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -407,9 +434,9 @@ export default function CalendarView({
                     </button>
                   </div>
 
-                  {/* Tasks List Container */}
-                  <div className="flex-1 overflow-y-auto px-1.5 pb-1.5 space-y-1 scrollbar-thin">
-                    {dayTasks.map((task) => (
+                  {/* Tasks (capped for a uniform grid; overflow opens the day peek) */}
+                  <div className="flex-1 px-1.5 pb-1.5 space-y-1 overflow-hidden">
+                    {visibleTasks.map((task) => (
                       <div
                         key={task.id}
                         draggable
@@ -437,6 +464,17 @@ export default function CalendarView({
                         )}
                       </div>
                     ))}
+                    {overflowCount > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDayDetail(dateStr);
+                        }}
+                        className="w-full text-left text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1.5 py-0.5 cursor-pointer"
+                      >
+                        +{overflowCount} more
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -535,6 +573,85 @@ export default function CalendarView({
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* DAY PEEK: full task list for a single day */}
+      {dayDetail && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setDayDetail(null)}
+        >
+          <div
+            className="w-full max-w-sm max-h-[80vh] bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-200 dark:border-[#1E222B] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white leading-tight">
+                    {new Date(`${dayDetail}T00:00:00`).toLocaleDateString(undefined, {
+                      weekday: "long",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {dayDetailTasks.length} scheduled
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDayDetail(null)}
+                className="p-1 rounded-full text-slate-400 hover:bg-slate-200 dark:hover:bg-[#1E222B] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-2">
+              {dayDetailTasks.map((task) => (
+                <button
+                  key={task.id}
+                  onClick={() => {
+                    setDayDetail(null);
+                    onOpenTaskModal(task);
+                  }}
+                  style={{ borderLeftColor: getStatusBorderColor(task.status) }}
+                  className="w-full text-left bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] border-l-4 rounded-lg p-2.5 hover:border-indigo-500/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{task.title}</span>
+                    <span className="text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                      {task.priority}
+                    </span>
+                  </div>
+                  {task.assignee && task.assignee !== "Unassigned" && (
+                    <div className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 dark:text-slate-400 mt-1">
+                      <User className="w-3 h-3" />
+                      <span>{task.assignee}</span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-3 border-t border-slate-200 dark:border-[#1E222B]">
+              <button
+                onClick={() => {
+                  const d = dayDetail;
+                  setDayDetail(null);
+                  onOpenTaskModal(null, undefined, { startDate: d, dueDate: d });
+                }}
+                className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add task on this day
+              </button>
+            </div>
           </div>
         </div>
       )}
