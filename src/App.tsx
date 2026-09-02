@@ -113,22 +113,46 @@ export default function App() {
     { mode: AccessModalMode; spaceName?: string; onSubmit: (pw: string) => Promise<string | null> } | null
   >(null);
   const pendingAfterModal = useRef<null | (() => void)>(null);
+  // False until the shared password map has been fetched at least once. An
+  // empty map before this is "not loaded yet", NOT "no passwords set".
+  const [securityLoaded, setSecurityLoaded] = useState(false);
+  const securityLoadPromise = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     accessRef.current = access;
     persistAccess(access);
   }, [access]);
 
-  // Load the shared space password map on start.
+  // Load the shared space password map on start. The rest of the UI becomes
+  // interactive immediately (spaces come from localStorage), so access checks
+  // must await this before deciding — see ensureSecurityLoaded.
   useEffect(() => {
-    fetchAppState("space_security").then((res) => {
+    const p = fetchAppState("space_security")
+      .then((res) => {
+        if (res.ok && res.value && typeof res.value === "object") {
+          const map = res.value as SpaceSecurity;
+          spaceSecurityRef.current = map;
+          setSpaceSecurity(map);
+        }
+      })
+      .finally(() => setSecurityLoaded(true));
+    securityLoadPromise.current = p;
+  }, []);
+
+  // Guarantees the password map has been fetched before an access decision is
+  // made. Fixes the first-load race (UI ready before the fetch lands) and
+  // retries once if the map is still empty (transient network failure).
+  const ensureSecurityLoaded = async () => {
+    if (securityLoadPromise.current) await securityLoadPromise.current;
+    if (Object.keys(spaceSecurityRef.current).length === 0) {
+      const res = await fetchAppState("space_security");
       if (res.ok && res.value && typeof res.value === "object") {
         const map = res.value as SpaceSecurity;
         spaceSecurityRef.current = map;
         setSpaceSecurity(map);
       }
-    });
-  }, []);
+    }
+  };
 
   const grantAdmin = () => {
     accessRef.current = { ...accessRef.current, admin: true };
@@ -184,6 +208,9 @@ export default function App() {
           pendingAfterModal.current = onOpen || null;
           return null;
         }
+        // Ensure the shared password map has loaded before deciding — otherwise
+        // a slow/first-load fetch is misread as "this space has no password".
+        await ensureSecurityLoaded();
         const h = await hashPassword(pw);
         if (spaceSecurityRef.current[id] && h === spaceSecurityRef.current[id]) {
           unlockSpace(id);
@@ -1186,7 +1213,9 @@ export default function App() {
               </div>
               <h2 className="text-lg font-black text-slate-900 dark:text-white">“{activeProject?.name}” is locked</h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5 max-w-xs leading-relaxed">
-                {hasPassword(activeProjectId, spaceSecurity)
+                {!securityLoaded
+                  ? "Checking access…"
+                  : hasPassword(activeProjectId, spaceSecurity)
                   ? "Enter this space's password to view and edit it. The admin password also works."
                   : "This space has no password yet — only an admin can open it and set one."}
               </p>
