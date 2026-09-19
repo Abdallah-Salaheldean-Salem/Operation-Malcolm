@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate } from "../types";
+import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
+import { CONSTRAINT_LABELS, isDeadlineMissed, constraintWarning } from "../lib/scheduling";
 import {
   X,
   Calendar,
@@ -15,6 +16,8 @@ import {
   Bookmark,
   ChevronDown,
   AlertTriangle,
+  Flag,
+  Repeat,
 } from "lucide-react";
 
 interface TaskModalProps {
@@ -66,6 +69,11 @@ export default function TaskModal({
   const [dependencies, setDependencies] = useState<string[]>([]);
   const [isMilestone, setIsMilestone] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [deadline, setDeadline] = useState("");
+  const [constraintType, setConstraintType] = useState<ConstraintType>("none");
+  const [constraintDate, setConstraintDate] = useState("");
+  const [recurrenceFreq, setRecurrenceFreq] = useState<"none" | RecurrenceFrequency>("none");
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1);
 
   // Subtask/Comment helpers
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -97,6 +105,11 @@ export default function TaskModal({
       setDependencies(task.dependencies || []);
       setIsMilestone(task.isMilestone || false);
       setProgress(task.progress || 0);
+      setDeadline(task.deadline || "");
+      setConstraintType(task.constraintType || "none");
+      setConstraintDate(task.constraintDate || "");
+      setRecurrenceFreq(task.recurrence?.frequency || "none");
+      setRecurrenceInterval(task.recurrence?.interval || 1);
     } else {
       setTitle("");
       setDescription("");
@@ -113,6 +126,11 @@ export default function TaskModal({
       setDependencies([]);
       setIsMilestone(false);
       setProgress(0);
+      setDeadline("");
+      setConstraintType("none");
+      setConstraintDate("");
+      setRecurrenceFreq("none");
+      setRecurrenceInterval(1);
     }
   }, [task, columns, defaultColumnId, defaultDates]);
 
@@ -147,6 +165,13 @@ export default function TaskModal({
       dependencies,
       isMilestone,
       progress: Number(progress),
+      deadline,
+      constraintType,
+      constraintDate: constraintType === "none" ? "" : constraintDate,
+      recurrence:
+        recurrenceFreq === "none"
+          ? undefined
+          : { frequency: recurrenceFreq, interval: Math.max(1, Number(recurrenceInterval) || 1) },
     });
     onClose();
   };
@@ -586,6 +611,108 @@ export default function TaskModal({
                   className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
                 />
               </div>
+            </div>
+
+            {/* Deadline & scheduling constraint */}
+            <div className="space-y-2 bg-slate-50 dark:bg-[#0F1115] p-2.5 rounded-lg border border-slate-100 dark:border-[#161A22]">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label htmlFor="task-deadline" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center space-x-1">
+                    <Flag className="w-3 h-3 text-rose-500" />
+                    <span>Deadline</span>
+                  </label>
+                  <input
+                    id="task-deadline"
+                    type="date"
+                    value={deadline}
+                    onChange={(e) => setDeadline(e.target.value)}
+                    className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="task-constraint-type" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Constraint
+                  </label>
+                  <select
+                    id="task-constraint-type"
+                    value={constraintType}
+                    onChange={(e) => setConstraintType(e.target.value as ConstraintType)}
+                    className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
+                  >
+                    {(Object.keys(CONSTRAINT_LABELS) as ConstraintType[]).map((c) => (
+                      <option key={c} value={c}>{CONSTRAINT_LABELS[c]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {constraintType !== "none" && (
+                <div>
+                  <label htmlFor="task-constraint-date" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Constraint date
+                  </label>
+                  <input
+                    id="task-constraint-date"
+                    type="date"
+                    value={constraintDate}
+                    onChange={(e) => setConstraintDate(e.target.value)}
+                    className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  />
+                </div>
+              )}
+              {isDeadlineMissed({ startDate, dueDate, deadline, constraintType, constraintDate }) && (
+                <p className="flex items-start gap-1 text-[10px] font-semibold text-rose-500 leading-snug">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>Due date {dueDate} is past the deadline {deadline}.</span>
+                </p>
+              )}
+              {constraintWarning({ startDate, dueDate, deadline, constraintType, constraintDate }) && (
+                <p className="flex items-start gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 leading-snug">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>{constraintWarning({ startDate, dueDate, deadline, constraintType, constraintDate })}</span>
+                </p>
+              )}
+            </div>
+
+            {/* Recurrence */}
+            <div className="bg-slate-50 dark:bg-[#0F1115] p-2.5 rounded-lg border border-slate-100 dark:border-[#161A22]">
+              <label htmlFor="task-recurrence-freq" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <Repeat className="w-3 h-3 text-indigo-500" />
+                <span>Repeat</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  id="task-recurrence-freq"
+                  value={recurrenceFreq}
+                  onChange={(e) => setRecurrenceFreq(e.target.value as "none" | RecurrenceFrequency)}
+                  className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs font-semibold focus:outline-none"
+                >
+                  <option value="none">Does not repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+                {recurrenceFreq !== "none" && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">every</span>
+                    <input
+                      id="task-recurrence-interval"
+                      type="number"
+                      min="1"
+                      value={recurrenceInterval}
+                      onChange={(e) => setRecurrenceInterval(Math.max(1, Number(e.target.value)))}
+                      className="w-16 bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                    />
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      {recurrenceFreq === "daily" ? "day(s)" : recurrenceFreq === "weekly" ? "week(s)" : "month(s)"}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {recurrenceFreq !== "none" && (
+                <p className="mt-1 text-[9px] text-slate-500 dark:text-slate-400 leading-snug">
+                  Completing this task auto-creates the next occurrence with dates advanced.
+                </p>
+              )}
             </div>
 
             {/* Estimation Hours */}

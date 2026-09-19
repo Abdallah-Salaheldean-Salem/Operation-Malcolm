@@ -1,9 +1,28 @@
 export type TaskPriority = "low" | "medium" | "high" | "urgent";
 
+// MS Project-style scheduling constraint (advisory — it flags violations but
+// does not auto-reschedule). "none" == As Soon As Possible (the default).
+export type ConstraintType =
+  | "none"
+  | "start-no-earlier-than"
+  | "start-no-later-than"
+  | "must-start-on"
+  | "finish-no-later-than"
+  | "must-finish-on";
+
 export interface SubTask {
   id: string;
   title: string;
   completed: boolean;
+}
+
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly";
+
+// When a recurring task is completed, the app spawns the next occurrence with
+// its dates advanced by `interval` periods of `frequency`.
+export interface Recurrence {
+  frequency: RecurrenceFrequency;
+  interval: number; // every N days / weeks / months (>= 1)
 }
 
 export interface TaskComment {
@@ -41,6 +60,10 @@ export interface Task {
   isMilestone?: boolean;   // Diamond milestone flag
   progress?: number;       // Progress percentage (0 - 100)
   moduleId?: string;       // Explicit module/subsystem assignment
+  deadline?: string;       // YYYY-MM-DD — hard target finish, distinct from dueDate; flagged if missed
+  constraintType?: ConstraintType; // scheduling constraint kind
+  constraintDate?: string; // YYYY-MM-DD paired with constraintType
+  recurrence?: Recurrence; // if set, completing the task spawns the next occurrence
 }
 
 // Hardware/engineering readiness lifecycle for a module (subsystem)
@@ -130,7 +153,6 @@ export interface Project {
   parentId?: string;  // Parent Space id (this Space is a sub-space)
   modules?: ProjectModule[]; // Subsystem breakdown
   goals?: SmartGoal[];       // SMART goals
-  checklistTemplates?: ChecklistTemplate[]; // Reusable checklists appliable to tasks
 }
 
 export interface SuggestedAction {

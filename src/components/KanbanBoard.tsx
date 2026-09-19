@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { Project, Task, BoardColumn, TaskPriority } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
+import { isDeadlineMissed } from "../lib/scheduling";
+import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
 import {
   Plus,
   MoreHorizontal,
@@ -25,6 +27,7 @@ import {
   Info,
   Clock,
   X,
+  Repeat,
 } from "lucide-react";
 
 interface KanbanBoardProps {
@@ -165,20 +168,29 @@ export default function KanbanBoard({
     e.preventDefault();
     const taskId = e.dataTransfer.getData("text/plain");
     if (!taskId) return;
-    if (!passesDoneGate(taskId, columnId)) return;
-
-    const updatedTasks = project.tasks.map((t) =>
-      t.id === taskId ? { ...t, status: columnId } : t
-    );
-    onUpdateProject({ ...project, tasks: updatedTasks });
+    moveTaskWithEffects(taskId, columnId);
   };
 
   // Move task via click transfer (fallback & accessibility)
   const handleMoveTask = (taskId: string, targetColId: string) => {
+    moveTaskWithEffects(taskId, targetColId);
+  };
+
+  // Central move: applies the Definition-of-Done gate and, when a recurring
+  // task is completed, spawns its next occurrence back in the first column.
+  const moveTaskWithEffects = (taskId: string, targetColId: string) => {
+    const task = project.tasks.find((t) => t.id === taskId);
+    if (!task || task.status === targetColId) return;
     if (!passesDoneGate(taskId, targetColId)) return;
-    const updatedTasks = project.tasks.map((t) =>
+
+    let updatedTasks = project.tasks.map((t) =>
       t.id === taskId ? { ...t, status: targetColId } : t
     );
+    const targetCol = project.columns.find((c) => c.id === targetColId);
+    if (shouldSpawnOnMove(task, task.status, targetCol, project.columns)) {
+      const next = spawnNextOccurrence({ ...task, status: targetColId }, project.columns);
+      if (next) updatedTasks = [...updatedTasks, next];
+    }
     onUpdateProject({ ...project, tasks: updatedTasks });
   };
 
@@ -947,6 +959,25 @@ export default function KanbanBoard({
                               <span className="flex items-center space-x-0.5">
                                 <CheckSquare className="w-3 h-3" />
                                 <span>{subtasksCompleted}/{totalSubtasks}</span>
+                              </span>
+                            )}
+                            {isDeadlineMissed(task) && (
+                              <span
+                                title={`Past deadline ${task.deadline}`}
+                                className="flex items-center space-x-0.5 text-rose-500 font-bold"
+                              >
+                                <AlertTriangle className="w-3 h-3" />
+                                <span>Late</span>
+                              </span>
+                            )}
+                            {task.recurrence && (
+                              <span
+                                title={task.recurrence.interval > 1
+                                  ? `Repeats every ${task.recurrence.interval} ${task.recurrence.frequency === "daily" ? "days" : task.recurrence.frequency === "weekly" ? "weeks" : "months"}`
+                                  : `Repeats ${task.recurrence.frequency}`}
+                                className="flex items-center text-indigo-500 dark:text-indigo-400"
+                              >
+                                <Repeat className="w-3 h-3" />
                               </span>
                             )}
                           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Project, Task, AppView } from "./types";
+import { Project, Task, AppView, ChecklistTemplate } from "./types";
 import { INITIAL_PROJECTS } from "./data";
 import { fetchProjects, saveProjectsBulk, deleteProjectRemote, stableStringify } from "./lib/supabase-sync";
 import Sidebar from "./components/Sidebar";
@@ -15,6 +15,10 @@ import ModulesView from "./components/ModulesView";
 import TaskModal from "./components/TaskModal";
 import AccessModal, { AccessModalMode } from "./components/AccessModal";
 import { fetchAppState, saveAppState } from "./lib/supabase-sync";
+import { spawnNextOccurrence, shouldSpawnOnMove } from "./lib/recurrence";
+import { seedMissingTemplates } from "./lib/checklist";
+
+type ChecklistTemplateMap = Record<string, ChecklistTemplate[]>;
 import {
   loadAccess,
   persistAccess,
@@ -152,6 +156,54 @@ export default function App() {
         setSpaceSecurity(map);
       }
     }
+  };
+
+  // --- Checklist templates (shared per-space, stored in app_state) ---
+  const [checklistTemplates, setChecklistTemplates] = useState<ChecklistTemplateMap>({});
+  const checklistTemplatesRef = useRef<ChecklistTemplateMap>({});
+  const [templatesLoaded, setTemplatesLoaded] = useState(false);
+
+  const persistTemplates = (map: ChecklistTemplateMap) => {
+    checklistTemplatesRef.current = map;
+    setChecklistTemplates(map);
+    saveAppState("checklist_templates", map);
+  };
+
+  // Load the shared checklist-template map on start.
+  useEffect(() => {
+    fetchAppState("checklist_templates")
+      .then((res) => {
+        if (res.ok && res.value && typeof res.value === "object") {
+          const map = res.value as ChecklistTemplateMap;
+          checklistTemplatesRef.current = map;
+          setChecklistTemplates(map);
+        }
+      })
+      .finally(() => setTemplatesLoaded(true));
+  }, []);
+
+  // Seed starter templates into any space that has never been seeded. A space
+  // that exists in the map (even as an empty list) is left untouched, so a user
+  // who clears the starters won't have them reappear.
+  useEffect(() => {
+    if (!templatesLoaded) return;
+    const next = seedMissingTemplates(checklistTemplatesRef.current, projects.map((p) => p.id));
+    if (next) persistTemplates(next);
+  }, [templatesLoaded, projects]);
+
+  const handleSaveChecklistTemplate = (projectId: string, name: string, items: string[]) => {
+    const current = checklistTemplatesRef.current;
+    const list = current[projectId] || [];
+    persistTemplates({
+      ...current,
+      [projectId]: [...list, { id: `tpl-${Date.now()}`, name, items }],
+    });
+  };
+
+  const handleDeleteChecklistTemplate = (projectId: string, id: string) => {
+    const current = checklistTemplatesRef.current;
+    const list = current[projectId] || [];
+    persistTemplates({ ...current, [projectId]: list.filter((t) => t.id !== id) });
   };
 
   const grantAdmin = () => {
@@ -591,6 +643,7 @@ export default function App() {
 
     if (taskData.id) {
       // Update existing task
+      const oldTask = activeProject.tasks.find((t) => t.id === taskData.id);
       updatedTasks = activeProject.tasks.map((t) => {
         if (t.id === taskData.id) {
           return {
@@ -600,6 +653,17 @@ export default function App() {
         }
         return t;
       });
+      // Recurring task completed via the modal's status change → spawn next.
+      const mergedTask = updatedTasks.find((t) => t.id === taskData.id);
+      const targetCol = activeProject.columns.find((c) => c.id === mergedTask?.status);
+      if (
+        mergedTask &&
+        oldTask &&
+        shouldSpawnOnMove(mergedTask, oldTask.status, targetCol, activeProject.columns)
+      ) {
+        const next = spawnNextOccurrence(mergedTask, activeProject.columns);
+        if (next) updatedTasks = [...updatedTasks, next];
+      }
     } else {
       // Create new task
       const newTask: Task = {
@@ -1396,22 +1460,9 @@ export default function App() {
           projectTags={activeProject.tags}
           projectMembers={["Unassigned", ...(activeProject.members?.map(m => m.name).filter(n => n !== "Unassigned") || ["Abdallah", "Sallam", "Alice", "Bob", "Charlie", "Diana"])]}
           allTasks={activeProject.tasks}
-          checklistTemplates={activeProject.checklistTemplates || []}
-          onSaveTemplate={(name, items) =>
-            handleUpdateProject({
-              ...activeProject,
-              checklistTemplates: [
-                ...(activeProject.checklistTemplates || []),
-                { id: `tpl-${Date.now()}`, name, items },
-              ],
-            })
-          }
-          onDeleteTemplate={(id) =>
-            handleUpdateProject({
-              ...activeProject,
-              checklistTemplates: (activeProject.checklistTemplates || []).filter((t) => t.id !== id),
-            })
-          }
+          checklistTemplates={checklistTemplates[activeProjectId] || []}
+          onSaveTemplate={(name, items) => handleSaveChecklistTemplate(activeProjectId, name, items)}
+          onDeleteTemplate={(id) => handleDeleteChecklistTemplate(activeProjectId, id)}
           onClose={() => {
             setIsTaskModalOpen(false);
             setDefaultDates(undefined);
