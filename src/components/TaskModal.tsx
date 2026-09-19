@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Task, BoardColumn, TaskPriority, SubTask } from "../types";
+import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate } from "../types";
 import { PRIORITIES } from "../data";
+import { checkDoneGate } from "../lib/checklist";
 import {
   X,
   Calendar,
@@ -12,6 +13,8 @@ import {
   Plus,
   Trash2,
   Bookmark,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react";
 
 interface TaskModalProps {
@@ -22,6 +25,9 @@ interface TaskModalProps {
   projectTags: string[];
   projectMembers: string[];
   allTasks?: Task[]; // existing tasks for dependency linkage
+  checklistTemplates?: ChecklistTemplate[];
+  onSaveTemplate?: (name: string, items: string[]) => void;
+  onDeleteTemplate?: (id: string) => void;
   onClose: () => void;
   onSave: (task: Partial<Task> & { id?: string }) => void;
   onDelete?: (id: string) => void;
@@ -35,6 +41,9 @@ export default function TaskModal({
   projectTags,
   projectMembers,
   allTasks = [],
+  checklistTemplates = [],
+  onSaveTemplate,
+  onDeleteTemplate,
   onClose,
   onSave,
   onDelete,
@@ -62,6 +71,13 @@ export default function TaskModal({
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newCommentText, setNewCommentText] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
+
+  // Checklist template controls
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState("");
+  // Definition-of-Done gate error when trying to save into a gated column.
+  const [statusError, setStatusError] = useState<string | null>(null);
 
   // Populate form if editing
   useEffect(() => {
@@ -104,6 +120,16 @@ export default function TaskModal({
     e.preventDefault();
     if (!title.trim()) return;
 
+    // Definition-of-Done gate: block saving a task into a gated column unless
+    // its checklist is fully complete.
+    const targetColumn = columns.find((c) => c.id === status);
+    const gateReason = checkDoneGate({ subtasks }, targetColumn);
+    if (gateReason) {
+      setStatusError(gateReason);
+      return;
+    }
+    setStatusError(null);
+
     onSave({
       ...(task ? { id: task.id } : {}),
       title,
@@ -145,6 +171,25 @@ export default function TaskModal({
 
   const handleDeleteSubtask = (id: string) => {
     setSubtasks(subtasks.filter((sub) => sub.id !== id));
+  };
+
+  // Checklist template actions
+  const applyTemplate = (tpl: ChecklistTemplate) => {
+    const additions: SubTask[] = tpl.items.map((t, i) => ({
+      id: `sub-${Date.now()}-${i}`,
+      title: t,
+      completed: false,
+    }));
+    setSubtasks((cur) => [...cur, ...additions]);
+    setShowTemplateMenu(false);
+  };
+
+  const saveAsTemplate = () => {
+    const name = templateNameInput.trim();
+    if (!name || subtasks.length === 0) return;
+    onSaveTemplate?.(name, subtasks.map((s) => s.title));
+    setTemplateNameInput("");
+    setShowSaveTemplate(false);
   };
 
   // Comments actions
@@ -248,9 +293,92 @@ export default function TaskModal({
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   <CheckSquare className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  <span>Subtasks ({subtasks.filter((s) => s.completed).length}/{subtasks.length})</span>
+                  <span>Checklist ({subtasks.filter((s) => s.completed).length}/{subtasks.length})</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {/* Apply a saved checklist template */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      id="apply-template-btn"
+                      onClick={() => { setShowTemplateMenu((v) => !v); setShowSaveTemplate(false); }}
+                      className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-2 py-1 transition-colors"
+                    >
+                      <Bookmark className="w-3 h-3" /> Templates <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {showTemplateMenu && (
+                      <div
+                        id="template-menu"
+                        className="absolute right-0 top-7 z-30 w-56 max-h-52 overflow-y-auto bg-white dark:bg-[#17191E] border border-slate-200 dark:border-[#1E222B] rounded-lg shadow-2xl py-1 text-left"
+                      >
+                        {checklistTemplates.length === 0 ? (
+                          <p className="px-3 py-2 text-[11px] text-slate-500 dark:text-slate-400 italic">
+                            No templates yet. Add checklist items, then “Save as template”.
+                          </p>
+                        ) : (
+                          checklistTemplates.map((tpl) => (
+                            <div key={tpl.id} className="flex items-center justify-between group px-1">
+                              <button
+                                type="button"
+                                onClick={() => applyTemplate(tpl)}
+                                className="flex-1 text-left px-2 py-1.5 rounded hover:bg-slate-50 dark:hover:bg-[#1C1F26]"
+                              >
+                                <span className="block text-xs font-semibold text-slate-700 dark:text-slate-200 truncate">{tpl.name}</span>
+                                <span className="block text-[10px] text-slate-500 dark:text-slate-400">{tpl.items.length} item{tpl.items.length === 1 ? "" : "s"}</span>
+                              </button>
+                              {onDeleteTemplate && (
+                                <button
+                                  type="button"
+                                  title="Delete template"
+                                  onClick={() => onDeleteTemplate(tpl.id)}
+                                  className="p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {onSaveTemplate && subtasks.length > 0 && (
+                    <button
+                      type="button"
+                      id="save-template-btn"
+                      onClick={() => { setShowSaveTemplate((v) => !v); setShowTemplateMenu(false); }}
+                      className="flex items-center gap-1 text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-[#0F1115] hover:bg-slate-200 dark:hover:bg-[#1E222B] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1 transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Save as template
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {showSaveTemplate && (
+                <div className="flex items-center gap-2 mb-2.5">
+                  <input
+                    id="template-name-input"
+                    type="text"
+                    autoFocus
+                    placeholder="Template name (e.g. Design Review)"
+                    value={templateNameInput}
+                    onChange={(e) => setTemplateNameInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") { e.preventDefault(); saveAsTemplate(); }
+                    }}
+                    className="flex-1 border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveAsTemplate}
+                    disabled={!templateNameInput.trim()}
+                    className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-bold"
+                  >
+                    Save
+                  </button>
+                </div>
+              )}
 
               <div className="space-y-1.5 mb-2.5 max-h-40 overflow-y-auto">
                 {subtasks.map((sub) => (
@@ -378,10 +506,16 @@ export default function TaskModal({
               >
                 {columns.map((col) => (
                   <option key={col.id} value={col.id}>
-                    {col.title}
+                    {col.title}{col.requireChecklist ? " ✓ (checklist required)" : ""}
                   </option>
                 ))}
               </select>
+              {statusError && (
+                <p className="mt-1 flex items-start gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 leading-snug">
+                  <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>{statusError}</span>
+                </p>
+              )}
             </div>
 
             {/* Assignee Selection */}

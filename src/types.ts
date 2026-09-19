@@ -13,6 +13,13 @@ export interface TaskComment {
   date: string;
 }
 
+// A reusable checklist that can be applied to any task's subtasks.
+export interface ChecklistTemplate {
+  id: string;
+  name: string;
+  items: string[];
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -85,6 +92,8 @@ export interface BoardColumn {
   id: string;
   title: string;
   color: string; // CSS color string (e.g., "#ef4444" or Tailwind-compatible color)
+  requireChecklist?: boolean; // Definition-of-Done gate: a task may only enter this
+                              // column when it has subtasks and all of them are complete.
 }
 
 export interface Team {
@@ -121,6 +130,7 @@ export interface Project {
   parentId?: string;  // Parent Space id (this Space is a sub-space)
   modules?: ProjectModule[]; // Subsystem breakdown
   goals?: SmartGoal[];       // SMART goals
+  checklistTemplates?: ChecklistTemplate[]; // Reusable checklists appliable to tasks
 }
 
 export interface SuggestedAction {

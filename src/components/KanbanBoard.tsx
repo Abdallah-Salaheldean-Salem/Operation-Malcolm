@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Project, Task, BoardColumn, TaskPriority } from "../types";
 import { PRIORITIES } from "../data";
+import { checkDoneGate } from "../lib/checklist";
 import {
   Plus,
   MoreHorizontal,
@@ -57,6 +58,13 @@ export default function KanbanBoard({
 
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState("");
+
+  // Definition-of-Done gate: transient message shown when a blocked move is attempted.
+  const [gateMessage, setGateMessage] = useState<string | null>(null);
+  const showGateBlock = (msg: string) => {
+    setGateMessage(msg);
+    window.setTimeout(() => setGateMessage((cur) => (cur === msg ? null : cur)), 4000);
+  };
 
   // Pivot Summary Dashboard State
   const [layoutMode, setLayoutMode] = useState<"pivot" | "kanban">("kanban");
@@ -157,6 +165,7 @@ export default function KanbanBoard({
     e.preventDefault();
     const taskId = e.dataTransfer.getData("text/plain");
     if (!taskId) return;
+    if (!passesDoneGate(taskId, columnId)) return;
 
     const updatedTasks = project.tasks.map((t) =>
       t.id === taskId ? { ...t, status: columnId } : t
@@ -166,10 +175,35 @@ export default function KanbanBoard({
 
   // Move task via click transfer (fallback & accessibility)
   const handleMoveTask = (taskId: string, targetColId: string) => {
+    if (!passesDoneGate(taskId, targetColId)) return;
     const updatedTasks = project.tasks.map((t) =>
       t.id === taskId ? { ...t, status: targetColId } : t
     );
     onUpdateProject({ ...project, tasks: updatedTasks });
+  };
+
+  // Definition-of-Done check for a task entering a column. Moving a task within
+  // the same column is always allowed. Returns false (and surfaces a message)
+  // when the target column gates on an incomplete checklist.
+  const passesDoneGate = (taskId: string, targetColId: string): boolean => {
+    const task = project.tasks.find((t) => t.id === taskId);
+    if (!task || task.status === targetColId) return true;
+    const targetCol = project.columns.find((c) => c.id === targetColId);
+    const reason = checkDoneGate(task, targetCol);
+    if (reason) {
+      showGateBlock(reason);
+      return false;
+    }
+    return true;
+  };
+
+  // Toggle the Definition-of-Done gate on a column.
+  const handleToggleColumnGate = (columnId: string) => {
+    const updatedCols = project.columns.map((col) =>
+      col.id === columnId ? { ...col, requireChecklist: !col.requireChecklist } : col
+    );
+    onUpdateProject({ ...project, columns: updatedCols });
+    setActiveMenuColumn(null);
   };
 
   const handleDeleteTask = (e: React.MouseEvent, taskId: string) => {
@@ -986,6 +1020,14 @@ export default function KanbanBoard({
                         {col.title}
                       </h3>
                     )}
+                    {col.requireChecklist && (
+                      <span
+                        title="Definition of Done: all checklist items must be complete to enter"
+                        className="flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                      >
+                        <CheckCircle2 className="w-2.5 h-2.5" /> DoD
+                      </span>
+                    )}
                     <span className="bg-slate-200/80 dark:bg-[#0F1115] text-slate-600 dark:text-indigo-400 border border-slate-300 dark:border-slate-800/80 text-[10px] font-black px-2 py-0.5 rounded-full">
                       {colTasks.length}
                     </span>
@@ -1052,6 +1094,30 @@ export default function KanbanBoard({
                             ))}
                           </div>
                         </div>
+
+                        {/* Definition-of-Done gate toggle */}
+                        <button
+                          id={`menu-toggle-gate-${col.id}`}
+                          onClick={() => handleToggleColumnGate(col.id)}
+                          className="w-full px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-[#1C1F26] font-medium text-slate-700 dark:text-slate-300 flex items-center justify-between space-x-2 border-t border-slate-200 dark:border-slate-800 cursor-pointer"
+                        >
+                          <span className="flex items-center space-x-2">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Definition of Done</span>
+                          </span>
+                          <span
+                            className={`w-8 h-4 rounded-full flex items-center px-0.5 transition-colors ${
+                              col.requireChecklist ? "bg-emerald-500 justify-end" : "bg-slate-300 dark:bg-slate-700 justify-start"
+                            }`}
+                          >
+                            <span className="w-3 h-3 rounded-full bg-white shadow" />
+                          </span>
+                        </button>
+                        {col.requireChecklist && (
+                          <p className="px-3 pb-1.5 text-[9px] leading-snug text-slate-500 dark:text-slate-400">
+                            Tasks need every checklist item ticked to enter this column.
+                          </p>
+                        )}
 
                         {project.columns.length > 1 && (
                           <button
@@ -1222,6 +1288,26 @@ export default function KanbanBoard({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Definition-of-Done blocked-move toast */}
+      {gateMessage && (
+        <div
+          id="dod-gate-toast"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] max-w-sm w-[calc(100%-2rem)] bg-white dark:bg-[#1C1F26] border border-amber-400/50 dark:border-amber-500/40 rounded-xl shadow-2xl px-4 py-3 flex items-start gap-2.5 animate-fade-in"
+        >
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 leading-snug flex-1">
+            {gateMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => setGateMessage(null)}
+            className="p-0.5 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-[#0F1115] transition-colors"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>

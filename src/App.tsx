@@ -1396,6 +1396,22 @@ export default function App() {
           projectTags={activeProject.tags}
           projectMembers={["Unassigned", ...(activeProject.members?.map(m => m.name).filter(n => n !== "Unassigned") || ["Abdallah", "Sallam", "Alice", "Bob", "Charlie", "Diana"])]}
           allTasks={activeProject.tasks}
+          checklistTemplates={activeProject.checklistTemplates || []}
+          onSaveTemplate={(name, items) =>
+            handleUpdateProject({
+              ...activeProject,
+              checklistTemplates: [
+                ...(activeProject.checklistTemplates || []),
+                { id: `tpl-${Date.now()}`, name, items },
+              ],
+            })
+          }
+          onDeleteTemplate={(id) =>
+            handleUpdateProject({
+              ...activeProject,
+              checklistTemplates: (activeProject.checklistTemplates || []).filter((t) => t.id !== id),
+            })
+          }
           onClose={() => {
             setIsTaskModalOpen(false);
             setDefaultDates(undefined);
