@@ -1368,6 +1368,7 @@ export default function App() {
             <ActivityView
               project={activeProject}
               onUpdateProject={handleUpdateProject}
+              checklistTemplates={checklistTemplates[activeProjectId] || []}
             />
           )}
 

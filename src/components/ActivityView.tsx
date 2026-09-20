@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Project, Task } from "../types";
+import { Project, Task, SubTask, ConstraintType, RecurrenceFrequency, ChecklistTemplate } from "../types";
 import { fetchAppState, saveAppState } from "../lib/supabase-sync";
-import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic } from "lucide-react";
+import { checkDoneGate } from "../lib/checklist";
+import { isDeadlineMissed, CONSTRAINT_LABELS } from "../lib/scheduling";
+import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
+import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle } from "lucide-react";
 
 interface ActivityViewProps {
   project: Project;
   onUpdateProject?: (updatedProj: Project) => void;
+  checklistTemplates?: ChecklistTemplate[];
 }
 
 interface DailyLog {
@@ -56,7 +60,7 @@ const INITIAL_LOGS: DailyLog[] = [
   }
 ];
 
-export default function ActivityView({ project, onUpdateProject }: ActivityViewProps) {
+export default function ActivityView({ project, onUpdateProject, checklistTemplates = [] }: ActivityViewProps) {
   // Persistence for daily logs
   const [logs, setLogs] = useState<DailyLog[]>(() => {
     const saved = localStorage.getItem("clickup_daily_logs");
@@ -205,6 +209,37 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
   // Edit mode state
   const [editingLogId, setEditingLogId] = useState<string | null>(null);
 
+  // Definition-of-Done gate message when a log is blocked.
+  const [gateMessage, setGateMessage] = useState<string | null>(null);
+  // Advanced fields (applied only when creating a NEW task from a log).
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [logDeadline, setLogDeadline] = useState("");
+  const [logConstraintType, setLogConstraintType] = useState<ConstraintType>("none");
+  const [logConstraintDate, setLogConstraintDate] = useState("");
+  const [logRecurrenceFreq, setLogRecurrenceFreq] = useState<"none" | RecurrenceFrequency>("none");
+  const [logRecurrenceInterval, setLogRecurrenceInterval] = useState(1);
+  const [logSubtasks, setLogSubtasks] = useState<SubTask[]>([]);
+
+  const applyTemplateToLog = (tplId: string) => {
+    const tpl = checklistTemplates.find((t) => t.id === tplId);
+    if (!tpl) return;
+    const now = Date.now();
+    setLogSubtasks((cur) => [
+      ...cur,
+      ...tpl.items.map((title, i) => ({ id: `sub-${now}-${i}`, title, completed: false })),
+    ]);
+  };
+
+  const resetAdvancedFields = () => {
+    setLogDeadline("");
+    setLogConstraintType("none");
+    setLogConstraintDate("");
+    setLogRecurrenceFreq("none");
+    setLogRecurrenceInterval(1);
+    setLogSubtasks([]);
+    setShowAdvanced(false);
+  };
+
   // Filter logs based on selected target date
   const displayLogs = logs
     .filter((log) => log.date === targetDate && project.tasks.some((t) => t.id === log.taskId))
@@ -239,6 +274,19 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
       }
     }
 
+    // Definition-of-Done gate: block a log that would move a linked task into a
+    // gated column whose checklist isn't fully complete.
+    if (!isNewTask) {
+      const linkedTask = project.tasks.find((t) => t.id === finalTaskId);
+      const targetCol = project.columns.find((c) => c.id === logStatus);
+      const reason = linkedTask ? checkDoneGate(linkedTask, targetCol) : null;
+      if (reason) {
+        setGateMessage(reason);
+        return;
+      }
+    }
+    setGateMessage(null);
+
     if (isNewTask && onUpdateProject) {
       const columnId = logStatus || project.columns[0]?.id || "todo";
       const newTask = {
@@ -253,9 +301,16 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
         tags: [],
         estimatedHours: Number(loggedHours) || 4,
         actualHours: Number(loggedHours) || 0,
-        subtasks: [],
+        subtasks: logSubtasks,
         comments: [],
         createdAt: new Date().toISOString(),
+        ...(logDeadline ? { deadline: logDeadline } : {}),
+        ...(logConstraintType !== "none"
+          ? { constraintType: logConstraintType, constraintDate: logConstraintDate }
+          : {}),
+        ...(logRecurrenceFreq !== "none"
+          ? { recurrence: { frequency: logRecurrenceFreq, interval: Math.max(1, Number(logRecurrenceInterval) || 1) } }
+          : {}),
       };
       onUpdateProject({
         ...project,
@@ -279,7 +334,20 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
         }
         return t;
       });
-      onUpdateProject({ ...project, tasks: updatedTasks });
+      // Recurrence: a recurring linked task completed via a log spawns its next.
+      const oldTask = project.tasks.find((t) => t.id === finalTaskId);
+      const mergedTask = updatedTasks.find((t) => t.id === finalTaskId);
+      const targetCol = project.columns.find((c) => c.id === logStatus);
+      let tasksOut = updatedTasks;
+      if (
+        oldTask &&
+        mergedTask &&
+        shouldSpawnOnMove(mergedTask, oldTask.status, targetCol, project.columns)
+      ) {
+        const next = spawnNextOccurrence(mergedTask, project.columns);
+        if (next) tasksOut = [...updatedTasks, next];
+      }
+      onUpdateProject({ ...project, tasks: tasksOut });
     }
 
     if (editingLogId) {
@@ -324,6 +392,7 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
     setLinkedTaskId("");
     setAdditionalNotes("");
     setLoggedHours(4);
+    resetAdvancedFields();
   };
 
   // Quick edit loader
@@ -515,12 +584,12 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
               </label>
               <select
                 value={logStatus}
-                onChange={(e) => setLogStatus(e.target.value as DailyLog["status"])}
+                onChange={(e) => { setLogStatus(e.target.value as DailyLog["status"]); setGateMessage(null); }}
                 className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500 transition-colors"
               >
                 {project.columns.map(col => (
                   <option key={col.id} value={col.id} className="bg-white dark:bg-[#14171C] text-slate-800 dark:text-slate-300">
-                    {col.title}
+                    {col.title}{col.requireChecklist ? " ✓ (checklist required)" : ""}
                   </option>
                 ))}
               </select>
@@ -603,6 +672,117 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
             )}
           </div>
 
+          {/* Advanced fields — only apply when creating a NEW task (no link) */}
+          {!linkedTaskId && (
+            <div className="border border-slate-200 dark:border-[#1E222B] rounded-lg">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+              >
+                <span>More fields — deadline, constraint, repeat, checklist</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? "rotate-180" : ""}`} />
+              </button>
+              {showAdvanced && (
+                <div className="px-3 pb-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col space-y-1">
+                      <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Flag className="w-3 h-3 text-rose-500" /> Deadline
+                      </label>
+                      <input
+                        type="date"
+                        value={logDeadline}
+                        onChange={(e) => setLogDeadline(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div className="flex flex-col space-y-1">
+                      <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Constraint</label>
+                      <select
+                        value={logConstraintType}
+                        onChange={(e) => setLogConstraintType(e.target.value as ConstraintType)}
+                        className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                      >
+                        {(Object.keys(CONSTRAINT_LABELS) as ConstraintType[]).map((c) => (
+                          <option key={c} value={c}>{CONSTRAINT_LABELS[c]}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {logConstraintType !== "none" && (
+                    <div className="flex flex-col space-y-1">
+                      <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Constraint date</label>
+                      <input
+                        type="date"
+                        value={logConstraintDate}
+                        onChange={(e) => setLogConstraintDate(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col space-y-1">
+                      <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Repeat className="w-3 h-3 text-indigo-500" /> Repeat
+                      </label>
+                      <select
+                        value={logRecurrenceFreq}
+                        onChange={(e) => setLogRecurrenceFreq(e.target.value as "none" | RecurrenceFrequency)}
+                        className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="none">Does not repeat</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    {logRecurrenceFreq !== "none" && (
+                      <div className="flex flex-col space-y-1">
+                        <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">Every (N)</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={logRecurrenceInterval}
+                          onChange={(e) => setLogRecurrenceInterval(Math.max(1, Number(e.target.value)))}
+                          className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Bookmark className="w-3 h-3 text-indigo-500" /> Checklist template
+                    </label>
+                    <select
+                      value=""
+                      onChange={(e) => { if (e.target.value) applyTemplateToLog(e.target.value); e.target.value = ""; }}
+                      className="w-full bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="">{checklistTemplates.length ? "Apply a template…" : "No templates in this space"}</option>
+                      {checklistTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>
+                      ))}
+                    </select>
+                    {logSubtasks.length > 0 && (
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        {logSubtasks.length} checklist item{logSubtasks.length === 1 ? "" : "s"} added
+                        <button type="button" onClick={() => setLogSubtasks([])} className="text-rose-500 hover:underline">clear</button>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {gateMessage && (
+            <p className="flex items-start gap-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400 leading-snug bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>{gateMessage}</span>
+            </p>
+          )}
+
           {/* Action Buttons */}
           <div className="flex items-center space-x-2 pt-2">
             <button
@@ -660,7 +840,9 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
               <p className="text-[10px] text-slate-500 dark:text-slate-400 dark:text-slate-500 mt-1">Use the Task Logger panel to add a task report on this date.</p>
             </div>
           ) : (
-            displayLogs.map((log) => (
+            displayLogs.map((log) => {
+              const linkedTask = project.tasks.find((t) => t.id === log.taskId);
+              return (
               <div
                 key={log.id}
                 className="bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-[#1E222B] hover:border-indigo-500/20 dark:hover:border-indigo-500/20 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all hover:shadow-[0_2px_12px_rgba(0,0,0,0.03)] dark:hover:shadow-[0_2px_12px_rgba(0,0,0,0.3)]"
@@ -685,6 +867,19 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${getStatusBadge(log.status)}`}>
                         {getStatusDisplay(log.status)}
                       </span>
+                      {linkedTask && isDeadlineMissed(linkedTask) && (
+                        <span
+                          title={`Past deadline ${linkedTask.deadline}`}
+                          className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center gap-1"
+                        >
+                          <AlertTriangle className="w-2.5 h-2.5" /> Late
+                        </span>
+                      )}
+                      {linkedTask?.recurrence && (
+                        <span title="Repeats on completion" className="text-indigo-500 dark:text-indigo-400">
+                          <Repeat className="w-3 h-3" />
+                        </span>
+                      )}
                       <span className="text-[10px] text-slate-500 dark:text-slate-600 dark:text-slate-400 font-medium bg-slate-100/80 dark:bg-[#1e222b]/50 px-2 py-0.5 rounded border border-slate-200 dark:border-[#1E222B] flex items-center gap-1">
                         <Calendar className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                         {log.date}
@@ -763,7 +958,8 @@ export default function ActivityView({ project, onUpdateProject }: ActivityViewP
 
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
