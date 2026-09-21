@@ -4,7 +4,7 @@ import { fetchAppState, saveAppState } from "../lib/supabase-sync";
 import { checkDoneGate } from "../lib/checklist";
 import { isDeadlineMissed, CONSTRAINT_LABELS } from "../lib/scheduling";
 import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
-import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle } from "lucide-react";
+import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle, CheckSquare } from "lucide-react";
 
 interface ActivityViewProps {
   project: Project;
@@ -218,16 +218,31 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
   const [logConstraintDate, setLogConstraintDate] = useState("");
   const [logRecurrenceFreq, setLogRecurrenceFreq] = useState<"none" | RecurrenceFrequency>("none");
   const [logRecurrenceInterval, setLogRecurrenceInterval] = useState(1);
-  const [logSubtasks, setLogSubtasks] = useState<SubTask[]>([]);
+  const [logChecklist, setLogChecklist] = useState<SubTask[]>([]);
+  const [newLogChecklistItem, setNewLogChecklistItem] = useState("");
+  const [logSubtaskList, setLogSubtaskList] = useState<SubTask[]>([]);
+  const [newLogSubtaskItem, setNewLogSubtaskItem] = useState("");
 
   const applyTemplateToLog = (tplId: string) => {
     const tpl = checklistTemplates.find((t) => t.id === tplId);
     if (!tpl) return;
     const now = Date.now();
-    setLogSubtasks((cur) => [
+    setLogChecklist((cur) => [
       ...cur,
-      ...tpl.items.map((title, i) => ({ id: `sub-${now}-${i}`, title, completed: false })),
+      ...tpl.items.map((title, i) => ({ id: `chk-${now}-${i}`, title, completed: false })),
     ]);
+  };
+
+  const addLogChecklistItem = () => {
+    if (!newLogChecklistItem.trim()) return;
+    setLogChecklist((cur) => [...cur, { id: `chk-${Date.now()}`, title: newLogChecklistItem.trim(), completed: false }]);
+    setNewLogChecklistItem("");
+  };
+
+  const addLogSubtaskItem = () => {
+    if (!newLogSubtaskItem.trim()) return;
+    setLogSubtaskList((cur) => [...cur, { id: `sub-${Date.now()}`, title: newLogSubtaskItem.trim(), completed: false }]);
+    setNewLogSubtaskItem("");
   };
 
   const resetAdvancedFields = () => {
@@ -236,7 +251,10 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
     setLogConstraintDate("");
     setLogRecurrenceFreq("none");
     setLogRecurrenceInterval(1);
-    setLogSubtasks([]);
+    setLogChecklist([]);
+    setNewLogChecklistItem("");
+    setLogSubtaskList([]);
+    setNewLogSubtaskItem("");
     setShowAdvanced(false);
   };
 
@@ -301,8 +319,8 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
         tags: [],
         estimatedHours: Number(loggedHours) || 4,
         actualHours: Number(loggedHours) || 0,
-        subtasks: [],
-        checklist: logSubtasks,
+        subtasks: logSubtaskList,
+        checklist: logChecklist,
         comments: [],
         createdAt: new Date().toISOString(),
         ...(logDeadline ? { deadline: logDeadline } : {}),
@@ -751,9 +769,10 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
                       </div>
                     )}
                   </div>
-                  <div className="flex flex-col space-y-1">
+                  {/* Checklist: template + manual entry */}
+                  <div className="flex flex-col space-y-1.5">
                     <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                      <Bookmark className="w-3 h-3 text-indigo-500" /> Checklist template
+                      <Bookmark className="w-3 h-3 text-indigo-500" /> Checklist ({logChecklist.length})
                     </label>
                     <select
                       value=""
@@ -765,12 +784,51 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
                         <option key={t.id} value={t.id}>{t.name} ({t.items.length})</option>
                       ))}
                     </select>
-                    {logSubtasks.length > 0 && (
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        {logSubtasks.length} checklist item{logSubtasks.length === 1 ? "" : "s"} added
-                        <button type="button" onClick={() => setLogSubtasks([])} className="text-rose-500 hover:underline">clear</button>
-                      </p>
-                    )}
+                    {logChecklist.map((it) => (
+                      <div key={it.id} className="flex items-center justify-between bg-slate-100/60 dark:bg-[#14171C] rounded px-2 py-1 text-[11px] text-slate-700 dark:text-slate-300">
+                        <span className="truncate">{it.title}</span>
+                        <button type="button" onClick={() => setLogChecklist((cur) => cur.filter((x) => x.id !== it.id))} className="text-slate-400 hover:text-rose-500 shrink-0 ml-2">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Add a checklist item…"
+                        value={newLogChecklistItem}
+                        onChange={(e) => setNewLogChecklistItem(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLogChecklistItem(); } }}
+                        className="flex-1 bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      <button type="button" onClick={addLogChecklistItem} className="bg-slate-200 dark:bg-[#1E222B] hover:bg-slate-300 dark:hover:bg-[#262b36] text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">Add</button>
+                    </div>
+                  </div>
+
+                  {/* Subtasks: manual entry */}
+                  <div className="flex flex-col space-y-1.5">
+                    <label className="font-bold text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <CheckSquare className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Subtasks ({logSubtaskList.length})
+                    </label>
+                    {logSubtaskList.map((it) => (
+                      <div key={it.id} className="flex items-center justify-between bg-slate-100/60 dark:bg-[#14171C] rounded px-2 py-1 text-[11px] text-slate-700 dark:text-slate-300">
+                        <span className="truncate">{it.title}</span>
+                        <button type="button" onClick={() => setLogSubtaskList((cur) => cur.filter((x) => x.id !== it.id))} className="text-slate-400 hover:text-rose-500 shrink-0 ml-2">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Add a subtask…"
+                        value={newLogSubtaskItem}
+                        onChange={(e) => setNewLogSubtaskItem(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addLogSubtaskItem(); } }}
+                        className="flex-1 bg-slate-50 dark:bg-[#0B0D11] border border-slate-200 dark:border-[#1E222B] text-slate-800 dark:text-slate-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500"
+                      />
+                      <button type="button" onClick={addLogSubtaskItem} className="bg-slate-200 dark:bg-[#1E222B] hover:bg-slate-300 dark:hover:bg-[#262b36] text-slate-700 dark:text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold">Add</button>
+                    </div>
                   </div>
                 </div>
               )}
