@@ -679,6 +679,7 @@ export default function App() {
         estimatedHours: Number(taskData.estimatedHours) || 0,
         actualHours: Number(taskData.actualHours) || 0,
         subtasks: taskData.subtasks || [],
+        checklist: taskData.checklist || [],
         comments: taskData.comments || [],
         createdAt: new Date().toISOString().split("T")[0],
       };

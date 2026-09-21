@@ -38,6 +38,11 @@ export function spawnNextOccurrence(task: Task, columns: BoardColumn[]): Task | 
       title: s.title,
       completed: false,
     })),
+    checklist: (task.checklist || []).map((s, i) => ({
+      id: `chk-${now}-${i}`,
+      title: s.title,
+      completed: false,
+    })),
     comments: [],
     startDate: adv(task.startDate),
     dueDate: adv(task.dueDate),

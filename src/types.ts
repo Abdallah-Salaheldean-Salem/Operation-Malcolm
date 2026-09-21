@@ -52,6 +52,7 @@ export interface Task {
   estimatedHours: number;
   actualHours: number;
   subtasks: SubTask[];
+  checklist?: SubTask[]; // Definition-of-Done checklist (templates + gate operate here)
   comments: TaskComment[];
   createdAt: string;
   location?: string;

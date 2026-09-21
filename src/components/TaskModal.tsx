@@ -65,6 +65,7 @@ export default function TaskModal({
   const [actualHours, setActualHours] = useState(0);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
+  const [checklist, setChecklist] = useState<SubTask[]>([]);
   const [comments, setComments] = useState<{ id: string; author: string; text: string; date: string }[]>([]);
   const [dependencies, setDependencies] = useState<string[]>([]);
   const [isMilestone, setIsMilestone] = useState(false);
@@ -75,8 +76,9 @@ export default function TaskModal({
   const [recurrenceFreq, setRecurrenceFreq] = useState<"none" | RecurrenceFrequency>("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
 
-  // Subtask/Comment helpers
+  // Subtask/Checklist/Comment helpers
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+  const [newChecklistTitle, setNewChecklistTitle] = useState("");
   const [newCommentText, setNewCommentText] = useState("");
   const [newTagInput, setNewTagInput] = useState("");
 
@@ -101,6 +103,7 @@ export default function TaskModal({
       setActualHours(task.actualHours || 0);
       setSelectedTags(task.tags || []);
       setSubtasks(task.subtasks || []);
+      setChecklist(task.checklist || []);
       setComments(task.comments || []);
       setDependencies(task.dependencies || []);
       setIsMilestone(task.isMilestone || false);
@@ -122,6 +125,7 @@ export default function TaskModal({
       setActualHours(0);
       setSelectedTags([]);
       setSubtasks([]);
+      setChecklist([]);
       setComments([]);
       setDependencies([]);
       setIsMilestone(false);
@@ -141,7 +145,7 @@ export default function TaskModal({
     // Definition-of-Done gate: block saving a task into a gated column unless
     // its checklist is fully complete.
     const targetColumn = columns.find((c) => c.id === status);
-    const gateReason = checkDoneGate({ subtasks }, targetColumn);
+    const gateReason = checkDoneGate({ checklist }, targetColumn);
     if (gateReason) {
       setStatusError(gateReason);
       return;
@@ -161,6 +165,7 @@ export default function TaskModal({
       actualHours: Number(actualHours),
       tags: selectedTags,
       subtasks,
+      checklist,
       comments,
       dependencies,
       isMilestone,
@@ -198,21 +203,36 @@ export default function TaskModal({
     setSubtasks(subtasks.filter((sub) => sub.id !== id));
   };
 
-  // Checklist template actions
+  // Checklist item actions
+  const handleAddChecklist = () => {
+    if (!newChecklistTitle.trim()) return;
+    setChecklist([...checklist, { id: `chk-${Date.now()}`, title: newChecklistTitle.trim(), completed: false }]);
+    setNewChecklistTitle("");
+  };
+
+  const handleToggleChecklist = (id: string) => {
+    setChecklist(checklist.map((it) => (it.id === id ? { ...it, completed: !it.completed } : it)));
+  };
+
+  const handleDeleteChecklist = (id: string) => {
+    setChecklist(checklist.filter((it) => it.id !== id));
+  };
+
+  // Checklist template actions (operate on the checklist)
   const applyTemplate = (tpl: ChecklistTemplate) => {
     const additions: SubTask[] = tpl.items.map((t, i) => ({
-      id: `sub-${Date.now()}-${i}`,
+      id: `chk-${Date.now()}-${i}`,
       title: t,
       completed: false,
     }));
-    setSubtasks((cur) => [...cur, ...additions]);
+    setChecklist((cur) => [...cur, ...additions]);
     setShowTemplateMenu(false);
   };
 
   const saveAsTemplate = () => {
     const name = templateNameInput.trim();
-    if (!name || subtasks.length === 0) return;
-    onSaveTemplate?.(name, subtasks.map((s) => s.title));
+    if (!name || checklist.length === 0) return;
+    onSaveTemplate?.(name, checklist.map((s) => s.title));
     setTemplateNameInput("");
     setShowSaveTemplate(false);
   };
@@ -318,7 +338,7 @@ export default function TaskModal({
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   <CheckSquare className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                  <span>Checklist ({subtasks.filter((s) => s.completed).length}/{subtasks.length})</span>
+                  <span>Checklist ({checklist.filter((s) => s.completed).length}/{checklist.length})</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {/* Apply a saved checklist template */}
@@ -367,7 +387,7 @@ export default function TaskModal({
                       </div>
                     )}
                   </div>
-                  {onSaveTemplate && subtasks.length > 0 && (
+                  {onSaveTemplate && checklist.length > 0 && (
                     <button
                       type="button"
                       id="save-template-btn"
@@ -406,6 +426,71 @@ export default function TaskModal({
               )}
 
               <div className="space-y-1.5 mb-2.5 max-h-40 overflow-y-auto">
+                {checklist.map((sub) => (
+                  <div
+                    key={sub.id}
+                    id={`checklist-row-${sub.id}`}
+                    className="flex items-center justify-between bg-slate-50 dark:bg-[#0F1115] px-3 py-1.5 rounded-lg border border-slate-100 dark:border-[#161A22] text-sm group"
+                  >
+                    <label className="flex items-center space-x-2.5 cursor-pointer flex-1">
+                      <input
+                        id={`checklist-check-${sub.id}`}
+                        type="checkbox"
+                        checked={sub.completed}
+                        onChange={() => handleToggleChecklist(sub.id)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600"
+                      />
+                      <span className={`text-slate-700 dark:text-slate-300 ${sub.completed ? "line-through text-slate-500 dark:text-slate-400" : ""}`}>
+                        {sub.title}
+                      </span>
+                    </label>
+                    <button
+                      id={`checklist-delete-${sub.id}`}
+                      type="button"
+                      onClick={() => handleDeleteChecklist(sub.id)}
+                      className="text-slate-500 dark:text-slate-400 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex space-x-2">
+                <input
+                  id="new-checklist-input"
+                  type="text"
+                  placeholder="Add a checklist item…"
+                  value={newChecklistTitle}
+                  onChange={(e) => setNewChecklistTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddChecklist();
+                    }
+                  }}
+                  className="flex-1 border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+                <button
+                  id="add-checklist-btn"
+                  type="button"
+                  onClick={handleAddChecklist}
+                  className="bg-slate-100 hover:bg-slate-200 dark:hover:bg-[#1E222B] text-slate-700 dark:text-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Subtasks Section */}
+            <div id="subtasks-editor" className="border-t border-slate-100 dark:border-[#161A22] pt-4">
+              <div className="flex items-center space-x-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                <CheckSquare className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+                <span>Subtasks ({subtasks.filter((s) => s.completed).length}/{subtasks.length})</span>
+              </div>
+
+              <div className="space-y-1.5 mb-2.5 max-h-40 overflow-y-auto">
                 {subtasks.map((sub) => (
                   <div
                     key={sub.id}
@@ -440,7 +525,7 @@ export default function TaskModal({
                 <input
                   id="new-subtask-input"
                   type="text"
-                  placeholder="Add a checklist item…"
+                  placeholder="Add a subtask…"
                   value={newSubtaskTitle}
                   onChange={(e) => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={(e) => {
