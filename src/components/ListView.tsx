@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Project, Task } from "../types";
-import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal } from "lucide-react";
+import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download } from "lucide-react";
 
 interface ListViewProps {
   project: Project;
@@ -52,10 +52,68 @@ export default function ListView({
     return matchesSearch && matchesPriority && matchesAssignee && matchesStatus;
   });
 
+  const [exporting, setExporting] = useState(false);
+  // Export the currently filtered tasks to a real .xlsx (SheetJS loaded on demand).
+  const exportToExcel = async () => {
+    if (filteredTasks.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const XLSX = await import("xlsx");
+      const colTitle = (id: string) => project.columns.find((c) => c.id === id)?.title || id;
+      const done = (arr?: { completed: boolean }[]) => (arr || []).filter((s) => s.completed).length;
+      const rows = filteredTasks.map((t) => ({
+        Status: colTitle(t.status),
+        Name: t.title,
+        Assignee: t.assignee || "Unassigned",
+        Priority: t.priority,
+        "Start Date": t.startDate || "",
+        "End Date": t.dueDate || "",
+        Deadline: t.deadline || "",
+        "Logged Hours": t.actualHours || 0,
+        "Estimated Hours": t.estimatedHours || 0,
+        "Progress %": typeof t.progress === "number" ? t.progress : "",
+        Checklist: `${done(t.checklist)}/${(t.checklist || []).length}`,
+        Subtasks: `${done(t.subtasks)}/${(t.subtasks || []).length}`,
+        Tags: (t.tags || []).join(", "),
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws["!cols"] = [
+        { wch: 14 }, { wch: 40 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 24 },
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Tasks");
+      const safe = ((project.name || "tasks").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "tasks";
+      const stamp = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(wb, `${safe}_${stamp}.xlsx`);
+    } catch (err) {
+      console.error("Excel export failed", err);
+      alert("Sorry — the Excel export failed. Please try again.");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#0F1115] overflow-y-auto">
       {/* ClickUp Style Spreadsheet / List View */}
       <div className="p-3 sm:p-6 max-w-[1400px] w-full mx-auto">
+        {/* Toolbar: task count + Excel export */}
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {filteredTasks.length} task{filteredTasks.length === 1 ? "" : "s"}
+          </span>
+          <button
+            id="export-excel-btn"
+            type="button"
+            onClick={exportToExcel}
+            disabled={filteredTasks.length === 0 || exporting}
+            className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/20 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {exporting ? "Exporting…" : "Export to Excel"}
+          </button>
+        </div>
         {project.columns.map((col) => {
           const colTasks = filteredTasks.filter(t => t.status === col.id);
           if (colTasks.length === 0) return null;
