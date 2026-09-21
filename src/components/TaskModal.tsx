@@ -440,7 +440,7 @@ export default function TaskModal({
                 <input
                   id="new-subtask-input"
                   type="text"
-                  placeholder="Add a new subtask..."
+                  placeholder="Add a checklist item…"
                   value={newSubtaskTitle}
                   onChange={(e) => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={(e) => {
