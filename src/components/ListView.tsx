@@ -94,12 +94,14 @@ export default function ListView({
               {/* Group Tasks Table (Spreadsheet style) */}
               {isExpanded && (
                 <div className="ml-0 sm:ml-6 border border-slate-200 dark:border-slate-800 rounded-md overflow-x-auto bg-white dark:bg-[#14171C] shadow-sm">
-                  <table className="w-full text-left border-collapse min-w-[600px]">
+                  <table className="w-full text-left border-collapse min-w-[820px]">
                     <thead className="bg-slate-50 dark:bg-[#1C1F26] border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
                       <tr>
-                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[50%]">Name</th>
-                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[15%]">Assignee</th>
-                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[15%]">Due Date</th>
+                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[32%]">Name</th>
+                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[13%]">Assignee</th>
+                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[12%]">Start Date</th>
+                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[12%]">End Date</th>
+                        <th className="py-2 px-3 font-bold border-r border-slate-200 dark:border-slate-800 w-[11%]">Logged Hrs</th>
                         <th className="py-2 px-3 font-bold w-[15%] border-r border-slate-200 dark:border-slate-800">Priority</th>
                         <th className="py-2 px-3 font-bold w-[5%] text-center"><MoreHorizontal className="w-3 h-3 mx-auto" /></th>
                       </tr>
@@ -130,6 +132,15 @@ export default function ListView({
                             )}
                           </td>
                           <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer text-xs" onClick={() => onOpenTaskModal(task)}>
+                            {task.startDate ? (
+                              <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-400">
+                                <span>{new Date(task.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">-</span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer text-xs" onClick={() => onOpenTaskModal(task)}>
                             {task.dueDate ? (
                               <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-400">
                                 <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
@@ -137,6 +148,12 @@ export default function ListView({
                             ) : (
                               <span className="text-slate-400 italic">-</span>
                             )}
+                          </td>
+                          <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer text-xs" onClick={() => onOpenTaskModal(task)}>
+                            <span className="text-slate-600 dark:text-slate-400 font-mono">
+                              {(task.actualHours || 0)}h
+                              {task.estimatedHours ? <span className="text-slate-400 dark:text-slate-500"> / {task.estimatedHours}h</span> : null}
+                            </span>
                           </td>
                           <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer" onClick={() => onOpenTaskModal(task)}>
                             <div className={`inline-flex items-center space-x-1.5 px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wider ${getPriorityColor(task.priority)}`}>
@@ -152,7 +169,7 @@ export default function ListView({
                         </tr>
                       ))}
                       <tr className="group">
-                        <td colSpan={5} className="py-1 px-3 border-l-4 border-transparent text-xs">
+                        <td colSpan={7} className="py-1 px-3 border-l-4 border-transparent text-xs">
                           <button 
                             onClick={() => onOpenTaskModal(null, col.id)}
                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 py-1.5 flex items-center space-x-1 transition-colors cursor-pointer w-full text-left"
