@@ -37,8 +37,10 @@ export function watcherNames(task: WatchFields): string[] {
 
 export const DUE_SOON_DAYS = 2;
 
-export type AlertKind = "overdue" | "due-today" | "due-soon" | "deadline-passed" | "deadline-soon" | "starts-today";
-export type AlertSeverity = "danger" | "warn" | "info";
+export type AlertKind =
+  | "overdue" | "due-today" | "due-soon" | "deadline-passed" | "deadline-soon" | "starts-today" // date reminders
+  | "assigned" | "completed" | "comment" | "due-changed"; // change events from teammates
+export type AlertSeverity = "danger" | "warn" | "info" | "event";
 
 export interface TaskAlert {
   key: string; // stable per (kind, task, date) — used for read/popped state
@@ -50,6 +52,9 @@ export interface TaskAlert {
   taskTitle: string;
   message: string;
   date: string;
+  source?: "date" | "event"; // event = shared notification from the database
+  eventId?: string;
+  createdAt?: string;
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -61,7 +66,7 @@ const fmt = (iso: string) =>
   new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
 
-const SEVERITY_RANK: Record<AlertSeverity, number> = { danger: 0, warn: 1, info: 2 };
+const SEVERITY_RANK: Record<AlertSeverity, number> = { danger: 0, warn: 1, info: 2, event: 3 };
 
 export function computeAlerts(
   projects: Project[],
@@ -78,7 +83,7 @@ export function computeAlerts(
       const col = p.columns.find((c) => c.id === t.status);
       if (isCompletionColumn(col)) continue; // finished work never alerts
       const push = (kind: AlertKind, date: string, message: string, severity: AlertSeverity) =>
-        out.push({ key: `${kind}:${p.id}:${t.id}:${date}`, kind, severity, projectId: p.id, projectName: p.name, taskId: t.id, taskTitle: t.title, message, date });
+        out.push({ key: `${kind}:${p.id}:${t.id}:${date}`, kind, severity, projectId: p.id, projectName: p.name, taskId: t.id, taskTitle: t.title, message, date, source: "date" });
 
       if (isDate(t.dueDate)) {
         const d = dayDiff(today, t.dueDate);

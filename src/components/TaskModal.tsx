@@ -255,7 +255,7 @@ export default function TaskModal({
     if (!newCommentText.trim()) return;
     const newCom = {
       id: `com-${Date.now()}`,
-      author: "Alex Chen", // Default current user
+      author: currentUser || "Guest",
       text: newCommentText.trim(),
       date: new Date().toISOString().split("T")[0],
     };

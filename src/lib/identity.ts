@@ -7,6 +7,9 @@ const KEY = "workspace_me_v1";
 export const sameName = (a?: string | null, b?: string | null): boolean =>
   !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
 
+// Canonical form used to address a member in shared notifications.
+export const nameKey = (name: string): string => name.trim().toLowerCase();
+
 export function loadMe(): string | null {
   try {
     const v = localStorage.getItem(KEY);

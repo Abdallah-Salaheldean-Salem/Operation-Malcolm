@@ -16,7 +16,17 @@ import TaskModal from "./components/TaskModal";
 import AccessModal, { AccessModalMode } from "./components/AccessModal";
 import IdentityModal from "./components/IdentityModal";
 import NotificationBell, { PopupPermission } from "./components/NotificationBell";
-import { loadMe, saveMe, sameName } from "./lib/identity";
+import { loadMe, saveMe, sameName, nameKey } from "./lib/identity";
+import { diffTaskEvents } from "./lib/notificationEvents";
+import {
+  RemoteNotification,
+  fetchNotifications,
+  insertNotifications,
+  markNotificationsRead,
+  fetchAlertReads,
+  saveAlertReads,
+  subscribeNotifications,
+} from "./lib/notifications-remote";
 import {
   TaskAlert,
   computeAlerts,
@@ -317,6 +327,14 @@ export default function App() {
   // after that do local edits get pushed. This prevents a fresh visitor's
   // seed data from overwriting everyone's shared workspace.
   const [syncReady, setSyncReady] = useState(false);
+  // "Who am I" on this device — also the actor recorded on change notifications.
+  const [me, setMeState] = useState<string | null>(() => loadMe());
+  const meRef = useRef(me);
+  meRef.current = me;
+  const setMe = (name: string | null) => {
+    saveMe(name);
+    setMeState(name);
+  };
   const syncReadyRef = useRef(false);
   const projectsRef = useRef(projects);
   const lastSyncedRef = useRef<Map<string, Project>>(new Map());
@@ -364,10 +382,15 @@ export default function App() {
     if (changed.length === 0) return;
     dirtyRef.current = true;
     const timer = setTimeout(async () => {
+      // Teammate notifications for what changed since the last synced copy.
+      const events = changed.flatMap((p) =>
+        diffTaskEvents(lastSyncedRef.current.get(p.id), p, meRef.current, localToday())
+      );
       savingRef.current = true;
       const ok = await saveProjectsBulk(changed);
       savingRef.current = false;
       if (ok) {
+        insertNotifications(events);
         changed.forEach((p) => lastSyncedRef.current.set(p.id, p));
         dirtyRef.current = projectsRef.current.some(
           (p) => lastSyncedRef.current.get(p.id) !== p
@@ -650,11 +673,6 @@ export default function App() {
   };
 
   // --- Identity ("who am I" on this device) + task notifications ---
-  const [me, setMeState] = useState<string | null>(() => loadMe());
-  const setMe = (name: string | null) => {
-    saveMe(name);
-    setMeState(name);
-  };
   const [identityPromptFor, setIdentityPromptFor] = useState<string | null>(null);
   const identitySkipRef = useRef<Set<string>>(
     (() => {
@@ -721,19 +739,95 @@ export default function App() {
       document.removeEventListener("visibilitychange", tick);
     };
   }, []);
-  const alerts = useMemo(
+  const dateAlerts = useMemo(
     () => computeAlerts(projects, me, today, (p) => canAccess(p.id, access, spaceSecurity)),
     [projects, me, today, access, spaceSecurity]
   );
 
   const [readKeys, setReadKeys] = useState<Set<string>>(() => loadKeySet(READ_KEY));
-  const markRead = (keys: string[]) =>
+  const addReadKeys = (keys: string[]) =>
     setReadKeys((prev) => {
       const next = new Set(prev);
       keys.forEach((k) => next.add(k));
       saveKeySet(READ_KEY, next);
       return next;
     });
+
+  // Shared change notifications addressed to me (assigned, done, comments, due moved).
+  const myKey = me ? nameKey(me) : null;
+  const [remoteEvents, setRemoteEvents] = useState<RemoteNotification[]>([]);
+  useEffect(() => {
+    setRemoteEvents([]);
+    if (!myKey) return;
+    let alive = true;
+    const load = () =>
+      fetchNotifications(myKey).then((rows) => {
+        if (alive && rows) setRemoteEvents(rows);
+      });
+    load();
+    fetchAlertReads(myKey).then((keys) => {
+      if (alive && keys && keys.length) addReadKeys(keys);
+    });
+    const unsubscribe = subscribeNotifications(myKey, (row) =>
+      setRemoteEvents((prev) => [row, ...prev.filter((r) => r.id !== row.id)])
+    );
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const poll = window.setInterval(load, 2 * 60 * 1000);
+    return () => {
+      alive = false;
+      unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(poll);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myKey]);
+
+  const eventAlerts = useMemo<TaskAlert[]>(() => {
+    const out: TaskAlert[] = [];
+    for (const r of remoteEvents) {
+      const p = projects.find((x) => x.id === r.project_id);
+      if (!p || p.archived || !canAccess(p.id, access, spaceSecurity)) continue;
+      out.push({
+        key: `evt:${r.id}`,
+        kind: r.kind,
+        severity: "event",
+        projectId: p.id,
+        projectName: p.name,
+        taskId: r.task_id || "",
+        taskTitle: r.task_title || "Task",
+        message: r.message,
+        date: r.created_at.slice(0, 10),
+        source: "event",
+        eventId: r.id,
+        createdAt: r.created_at,
+      });
+    }
+    return out;
+  }, [remoteEvents, projects, access, spaceSecurity]);
+
+  const alerts = useMemo(() => [...dateAlerts, ...eventAlerts], [dateAlerts, eventAlerts]);
+  const effectiveRead = useMemo(() => {
+    const set = new Set(readKeys);
+    remoteEvents.forEach((r) => r.read_at && set.add(`evt:${r.id}`));
+    return set;
+  }, [readKeys, remoteEvents]);
+
+  const markRead = (keys: string[]) => {
+    const fresh = keys.filter((k) => !effectiveRead.has(k));
+    if (fresh.length === 0) return;
+    addReadKeys(fresh);
+    const eventIds = fresh.filter((k) => k.startsWith("evt:")).map((k) => k.slice(4));
+    const dateKeys = fresh.filter((k) => !k.startsWith("evt:"));
+    if (eventIds.length) {
+      const now = new Date().toISOString();
+      setRemoteEvents((prev) => prev.map((r) => (eventIds.includes(r.id) && !r.read_at ? { ...r, read_at: now } : r)));
+      markNotificationsRead(eventIds);
+    }
+    if (myKey && dateKeys.length) saveAlertReads(myKey, dateKeys);
+  };
 
   // System pop-ups (while the app is open or in the background) for new alerts.
   const [popupPermission, setPopupPermission] = useState<PopupPermission>(() =>
@@ -750,7 +844,7 @@ export default function App() {
   useEffect(() => {
     if (popupPermission !== "granted" || alerts.length === 0) return;
     const popped = loadKeySet(POPPED_KEY);
-    const fresh = alerts.filter((a) => !popped.has(a.key) && !readKeys.has(a.key));
+    const fresh = alerts.filter((a) => !popped.has(a.key) && !effectiveRead.has(a.key));
     if (fresh.length === 0) return;
     fresh.forEach((a) => popped.add(a.key));
     saveKeySet(POPPED_KEY, popped);
@@ -767,13 +861,13 @@ export default function App() {
     markRead([a.key]);
     const proj = projects.find((p) => p.id === a.projectId);
     const task = proj?.tasks.find((t) => t.id === a.taskId);
-    if (!proj || !task) return;
+    if (!proj) return;
     if (proj.id !== activeProjectId) doSelectProject(proj.id);
-    handleOpenTaskModal(task);
+    if (task) handleOpenTaskModal(task);
   };
   const bellProps = {
     alerts,
-    readKeys,
+    readKeys: effectiveRead,
     me,
     popupPermission,
     onOpenAlert: openAlert,

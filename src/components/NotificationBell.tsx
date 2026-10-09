@@ -20,6 +20,17 @@ const DOT: Record<TaskAlert["severity"], string> = {
   danger: "bg-rose-500",
   warn: "bg-amber-500",
   info: "bg-sky-500",
+  event: "bg-indigo-500",
+};
+
+const ago = (iso?: string) => {
+  if (!iso) return "";
+  const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
 };
 
 export default function NotificationBell({
@@ -83,30 +94,43 @@ export default function NotificationBell({
               </div>
             ) : alerts.length === 0 ? (
               <p className="p-4 text-center text-xs text-slate-500 dark:text-slate-400">
-                Nothing coming up. Tick <b>Notify me</b> in a task to watch its dates — tasks assigned to you are watched automatically.
+                Nothing new. Tick <b>Notify me</b> in a task to follow it — tasks assigned to you are followed automatically.
               </p>
             ) : (
-              alerts.map((a) => {
-                const isUnread = !readKeys.has(a.key);
-                return (
-                  <button
-                    key={a.key}
-                    data-testid="notif-item"
-                    onClick={() => { setOpen(false); onOpenAlert(a); }}
-                    className={`w-full text-left flex items-start gap-2.5 px-3.5 py-2.5 border-b border-slate-100 dark:border-[#1E222B] last:border-0 hover:bg-slate-50 dark:hover:bg-[#1C2027] transition-colors ${isUnread ? "bg-indigo-500/5" : ""}`}
-                  >
-                    <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${DOT[a.severity]}`} />
-                    <span className="min-w-0 flex-1">
-                      <span className={`block text-xs truncate ${isUnread ? "font-black text-slate-900 dark:text-white" : "font-semibold text-slate-600 dark:text-slate-300"}`}>
-                        {a.taskTitle}
-                      </span>
-                      <span className="block text-[11px] text-slate-500 dark:text-slate-400">{a.message}</span>
-                      <span className="block text-[10px] text-slate-400 dark:text-slate-500 truncate">{a.projectName}</span>
-                    </span>
-                    {isUnread && <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
-                  </button>
-                );
-              })
+              ([
+                ["Coming up", alerts.filter((a) => a.source !== "event")],
+                ["Activity", alerts.filter((a) => a.source === "event")],
+              ] as [string, TaskAlert[]][])
+                .filter(([, list]) => list.length > 0)
+                .map(([label, list]) => (
+                  <div key={label}>
+                    <div className="px-3.5 pt-2 pb-1 text-[9px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</div>
+                    {list.map((a) => {
+                      const isUnread = !readKeys.has(a.key);
+                      return (
+                        <button
+                          key={a.key}
+                          data-testid="notif-item"
+                          onClick={() => { setOpen(false); onOpenAlert(a); }}
+                          className={`w-full text-left flex items-start gap-2.5 px-3.5 py-2.5 border-b border-slate-100 dark:border-[#1E222B] last:border-0 hover:bg-slate-50 dark:hover:bg-[#1C2027] transition-colors ${isUnread ? "bg-indigo-500/5" : ""}`}
+                        >
+                          <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${DOT[a.severity]}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className={`block text-xs truncate ${isUnread ? "font-black text-slate-900 dark:text-white" : "font-semibold text-slate-600 dark:text-slate-300"}`}>
+                              {a.taskTitle}
+                            </span>
+                            <span className="block text-[11px] text-slate-500 dark:text-slate-400 break-words">{a.message}</span>
+                            <span className="block text-[10px] text-slate-400 dark:text-slate-500 truncate">
+                              {a.projectName}
+                              {a.createdAt ? ` · ${ago(a.createdAt)}` : ""}
+                            </span>
+                          </span>
+                          {isUnread && <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))
             )}
           </div>
 
