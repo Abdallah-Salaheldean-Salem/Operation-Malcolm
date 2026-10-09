@@ -3,6 +3,7 @@ import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, Constraint
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
 import { CONSTRAINT_LABELS, isDeadlineMissed, constraintWarning } from "../lib/scheduling";
+import { isWatching, setWatching, watcherNames } from "../lib/notifications";
 import {
   X,
   Calendar,
@@ -18,6 +19,7 @@ import {
   AlertTriangle,
   Flag,
   Repeat,
+  Bell,
 } from "lucide-react";
 
 interface TaskModalProps {
@@ -34,6 +36,8 @@ interface TaskModalProps {
   onClose: () => void;
   onSave: (task: Partial<Task> & { id?: string }) => void;
   onDelete?: (id: string) => void;
+  currentUser?: string | null; // who "me" is on this device (for "Notify me")
+  onRequestIdentity?: () => void; // ask the user who they are
 }
 
 export default function TaskModal({
@@ -50,6 +54,8 @@ export default function TaskModal({
   onClose,
   onSave,
   onDelete,
+  currentUser = null,
+  onRequestIdentity,
 }: TaskModalProps) {
   const isEditing = !!task;
 
@@ -75,6 +81,8 @@ export default function TaskModal({
   const [constraintDate, setConstraintDate] = useState("");
   const [recurrenceFreq, setRecurrenceFreq] = useState<"none" | RecurrenceFrequency>("none");
   const [recurrenceInterval, setRecurrenceInterval] = useState(1);
+  // "Notify me": null = untouched (follow the task's current watch state).
+  const [watchOverride, setWatchOverride] = useState<boolean | null>(null);
 
   // Subtask/Checklist/Comment helpers
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
@@ -113,6 +121,7 @@ export default function TaskModal({
       setConstraintDate(task.constraintDate || "");
       setRecurrenceFreq(task.recurrence?.frequency || "none");
       setRecurrenceInterval(task.recurrence?.interval || 1);
+      setWatchOverride(null);
     } else {
       setTitle("");
       setDescription("");
@@ -135,6 +144,7 @@ export default function TaskModal({
       setConstraintDate("");
       setRecurrenceFreq("none");
       setRecurrenceInterval(1);
+      setWatchOverride(null);
     }
   }, [task, columns, defaultColumnId, defaultDates]);
 
@@ -177,6 +187,9 @@ export default function TaskModal({
         recurrenceFreq === "none"
           ? undefined
           : { frequency: recurrenceFreq, interval: Math.max(1, Number(recurrenceInterval) || 1) },
+      ...(currentUser && watchOverride !== null
+        ? setWatching({ assignee, watchers: task?.watchers, muted: task?.muted }, currentUser, watchOverride)
+        : {}),
     });
     onClose();
   };
@@ -647,6 +660,43 @@ export default function TaskModal({
                 ))}
               </select>
             </div>
+
+            {/* Notify me (watch this task's dates) */}
+            {(() => {
+              const watchState = { assignee, watchers: task?.watchers, muted: task?.muted };
+              const watching = watchOverride ?? isWatching(watchState, currentUser);
+              const others = watcherNames(
+                currentUser && watchOverride !== null ? { assignee, ...setWatching(watchState, currentUser, watchOverride) } : watchState
+              );
+              return (
+                <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3 py-2">
+                  {currentUser ? (
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        id="task-notify-me"
+                        type="checkbox"
+                        checked={watching}
+                        onChange={(e) => setWatchOverride(e.target.checked)}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-600"
+                      />
+                      <Bell className="w-3.5 h-3.5 text-indigo-500" />
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Notify me</span>
+                      {watchOverride === null && watching && assignee && assignee.toLowerCase() === currentUser.toLowerCase() && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">(assigned to you)</span>
+                      )}
+                    </label>
+                  ) : (
+                    <button type="button" onClick={onRequestIdentity} className="flex items-center gap-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      <Bell className="w-3.5 h-3.5" /> Notify me — choose who you are first
+                    </button>
+                  )}
+                  <p className="mt-1 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+                    Alerts for start, due (2 days ahead) and deadline dates.
+                    {others.length > 0 && <> Watching: {others.join(", ")}.</>}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Priority Selection */}
             <div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Project, Task, AppView, ChecklistTemplate } from "./types";
 import { INITIAL_PROJECTS } from "./data";
 import { fetchProjects, saveProjectsBulk, deleteProjectRemote, stableStringify } from "./lib/supabase-sync";
@@ -14,6 +14,20 @@ import SettingsView from "./components/SettingsView";
 import ModulesView from "./components/ModulesView";
 import TaskModal from "./components/TaskModal";
 import AccessModal, { AccessModalMode } from "./components/AccessModal";
+import IdentityModal from "./components/IdentityModal";
+import NotificationBell, { PopupPermission } from "./components/NotificationBell";
+import { loadMe, saveMe, sameName } from "./lib/identity";
+import {
+  TaskAlert,
+  computeAlerts,
+  localToday,
+  loadKeySet,
+  saveKeySet,
+  READ_KEY,
+  POPPED_KEY,
+  popupsSupported,
+  showSystemNotification,
+} from "./lib/notifications";
 import { fetchAppState, saveAppState } from "./lib/supabase-sync";
 import { spawnNextOccurrence, shouldSpawnOnMove } from "./lib/recurrence";
 import { seedMissingTemplates } from "./lib/checklist";
@@ -635,6 +649,139 @@ export default function App() {
     setIsTaskModalOpen(true);
   };
 
+  // --- Identity ("who am I" on this device) + task notifications ---
+  const [me, setMeState] = useState<string | null>(() => loadMe());
+  const setMe = (name: string | null) => {
+    saveMe(name);
+    setMeState(name);
+  };
+  const [identityPromptFor, setIdentityPromptFor] = useState<string | null>(null);
+  const identitySkipRef = useRef<Set<string>>(
+    (() => {
+      try {
+        return new Set<string>(JSON.parse(sessionStorage.getItem("identity_skip_v1") || "[]"));
+      } catch {
+        return new Set<string>();
+      }
+    })()
+  );
+  const activeUnlocked = !!activeProject && canAccess(activeProject.id, access, spaceSecurity);
+  const activeIsMember = !!me && (activeProject?.members || []).some((m) => sameName(m.name, me));
+  // After a space is unlocked, ask once who you are (unless you're already a member).
+  useEffect(() => {
+    if (!activeProject || !activeUnlocked || activeIsMember) return;
+    if (identitySkipRef.current.has(activeProject.id)) return;
+    setIdentityPromptFor(activeProject.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProject?.id, activeUnlocked, activeIsMember]);
+
+  const pickIdentity = (name: string) => {
+    setMe(name);
+    setIdentityPromptFor(null);
+  };
+  const joinIdentity = (name: string, role: string) => {
+    const proj = projects.find((p) => p.id === identityPromptFor);
+    const members = proj?.members || [];
+    if (proj && !members.some((m) => sameName(m.name, name))) {
+      const palette = ["bg-indigo-600", "bg-blue-600", "bg-emerald-600", "bg-amber-600", "bg-rose-600", "bg-violet-600", "bg-cyan-600"];
+      handleUpdateProject({
+        ...proj,
+        members: [
+          ...members,
+          { id: `m-${Date.now()}`, name, role: role || "Member", email: "", avatar: name.charAt(0).toUpperCase(), bg: palette[members.length % palette.length] },
+        ],
+      });
+    }
+    setMe(name);
+    setIdentityPromptFor(null);
+  };
+  const skipIdentity = () => {
+    if (identityPromptFor) {
+      identitySkipRef.current.add(identityPromptFor);
+      try {
+        sessionStorage.setItem("identity_skip_v1", JSON.stringify([...identitySkipRef.current]));
+      } catch {
+        /* ignore */
+      }
+    }
+    setIdentityPromptFor(null);
+  };
+  const requestIdentity = () => {
+    if (activeProject) setIdentityPromptFor(activeProject.id);
+  };
+
+  // Date alerts for watched tasks, re-evaluated as the day changes.
+  const [today, setToday] = useState(() => localToday());
+  useEffect(() => {
+    const tick = () => setToday(localToday());
+    const id = window.setInterval(tick, 10 * 60 * 1000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+  const alerts = useMemo(
+    () => computeAlerts(projects, me, today, (p) => canAccess(p.id, access, spaceSecurity)),
+    [projects, me, today, access, spaceSecurity]
+  );
+
+  const [readKeys, setReadKeys] = useState<Set<string>>(() => loadKeySet(READ_KEY));
+  const markRead = (keys: string[]) =>
+    setReadKeys((prev) => {
+      const next = new Set(prev);
+      keys.forEach((k) => next.add(k));
+      saveKeySet(READ_KEY, next);
+      return next;
+    });
+
+  // System pop-ups (while the app is open or in the background) for new alerts.
+  const [popupPermission, setPopupPermission] = useState<PopupPermission>(() =>
+    popupsSupported() ? (Notification.permission as PopupPermission) : "unsupported"
+  );
+  const enablePopups = async () => {
+    if (!popupsSupported()) return;
+    try {
+      setPopupPermission((await Notification.requestPermission()) as PopupPermission);
+    } catch {
+      /* ignore */
+    }
+  };
+  useEffect(() => {
+    if (popupPermission !== "granted" || alerts.length === 0) return;
+    const popped = loadKeySet(POPPED_KEY);
+    const fresh = alerts.filter((a) => !popped.has(a.key) && !readKeys.has(a.key));
+    if (fresh.length === 0) return;
+    fresh.forEach((a) => popped.add(a.key));
+    saveKeySet(POPPED_KEY, popped);
+    if (fresh.length > 3) {
+      const lines = fresh.slice(0, 3).map((a) => `• ${a.taskTitle} — ${a.message}`);
+      showSystemNotification(`${fresh.length} task reminders`, `${lines.join("\n")}\n…`, "task-reminders-summary");
+    } else {
+      fresh.forEach((a) => showSystemNotification(a.taskTitle, `${a.message} · ${a.projectName}`, a.key));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts, popupPermission]);
+
+  const openAlert = (a: TaskAlert) => {
+    markRead([a.key]);
+    const proj = projects.find((p) => p.id === a.projectId);
+    const task = proj?.tasks.find((t) => t.id === a.taskId);
+    if (!proj || !task) return;
+    if (proj.id !== activeProjectId) doSelectProject(proj.id);
+    handleOpenTaskModal(task);
+  };
+  const bellProps = {
+    alerts,
+    readKeys,
+    me,
+    popupPermission,
+    onOpenAlert: openAlert,
+    onMarkAllRead: () => markRead(alerts.map((a) => a.key)),
+    onEnablePopups: enablePopups,
+    onSwitchIdentity: requestIdentity,
+  };
+
   // Save Task (Create or Update)
   const handleSaveTask = (taskData: Partial<Task> & { id?: string }) => {
     if (!taskData.title?.trim()) return;
@@ -667,6 +814,7 @@ export default function App() {
     } else {
       // Create new task
       const newTask: Task = {
+        ...(taskData as Partial<Task>),
         id: `task-${Date.now()}`,
         title: taskData.title,
         description: taskData.description || "",
@@ -881,6 +1029,7 @@ export default function App() {
             >
               {theme === "dark" ? <Sun className="w-5 h-5 text-amber-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
             </button>
+            <NotificationBell {...bellProps} />
             <button
               onClick={() => setActiveView("settings")}
               title="Workspace settings"
@@ -954,6 +1103,9 @@ export default function App() {
             >
               <Redo2 className="w-3.5 h-3.5" />
             </button>
+
+            {/* Notifications */}
+            <NotificationBell {...bellProps} size="sm" />
 
             {/* Copy Link Trigger */}
             <button
@@ -1453,6 +1605,22 @@ export default function App() {
         />
       )}
 
+      {identityPromptFor && !accessModal && (() => {
+        const proj = projects.find((p) => p.id === identityPromptFor);
+        if (!proj) return null;
+        return (
+          <IdentityModal
+            key={proj.id}
+            spaceName={proj.name}
+            members={proj.members || []}
+            me={me}
+            onPick={pickIdentity}
+            onJoin={joinIdentity}
+            onSkip={skipIdentity}
+          />
+        );
+      })()}
+
       {isTaskModalOpen && (
         <TaskModal
           task={selectedTask}
@@ -1471,6 +1639,8 @@ export default function App() {
           }}
           onSave={handleSaveTask}
           onDelete={handleDeleteTask}
+          currentUser={me}
+          onRequestIdentity={requestIdentity}
         />
       )}
 

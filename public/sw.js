@@ -64,3 +64,16 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// Task reminder pop-ups: clicking one focuses the open app (or opens it).
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const win = wins.find((w) => new URL(w.url).origin === self.location.origin);
+      if (win) return win.focus();
+      return self.clients.openWindow(url);
+    })
+  );
+});

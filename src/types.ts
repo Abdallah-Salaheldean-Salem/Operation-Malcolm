@@ -65,6 +65,8 @@ export interface Task {
   constraintType?: ConstraintType; // scheduling constraint kind
   constraintDate?: string; // YYYY-MM-DD paired with constraintType
   recurrence?: Recurrence; // if set, completing the task spawns the next occurrence
+  watchers?: string[];     // member names who ticked "Notify me" on this task
+  muted?: string[];        // assignees who unticked the automatic "Notify me"
 }
 
 // Hardware/engineering readiness lifecycle for a module (subsystem)
