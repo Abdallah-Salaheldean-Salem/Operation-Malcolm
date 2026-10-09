@@ -1,7 +1,8 @@
 import React, { useState, useRef } from "react";
 import { Project, Task } from "../types";
 import { mergeImport } from "../lib/importTasks";
-import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download, Upload } from "lucide-react";
+import { buildImportGuide } from "../lib/importTemplate";
+import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download, Upload, FileText } from "lucide-react";
 
 interface ListViewProps {
   project: Project;
@@ -74,6 +75,20 @@ export default function ListView({
     }
   };
 
+  // Download a Markdown template + guide for the importer (space-aware, AI-ready).
+  const downloadImportTemplate = () => {
+    const md = buildImportGuide(project, (typeof document !== "undefined" && document.title) || "Task tracker");
+    const safe = ((project.name || "space").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "space";
+    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safe}_import-template.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const [exporting, setExporting] = useState(false);
   // Export the currently filtered tasks to a real .xlsx (SheetJS loaded on demand).
   const exportToExcel = async () => {
@@ -127,6 +142,16 @@ export default function ListView({
           </span>
           <div className="flex items-center gap-2">
           <input ref={importInputRef} type="file" accept=".json,application/json" onChange={handleImportFile} className="hidden" />
+          <button
+            id="import-template-btn"
+            type="button"
+            onClick={downloadImportTemplate}
+            title="Download a template + guide you can give to an AI to prepare an import file"
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Template
+          </button>
           <button
             id="import-tasks-btn"
             type="button"
