@@ -36,19 +36,21 @@ create extension if not exists pg_cron;
 create or replace function public.push_new_notification()
 returns trigger
 language plpgsql
-security definer
 set search_path = public
 as $$
 begin
-  perform net.http_post(
-    url := 'https://uyscrptjglpmuscsaqfp.supabase.co/functions/v1/push',
-    body := jsonb_build_object('action', 'event', 'id', new.id),
-    headers := '{"Content-Type": "application/json"}'::jsonb
-  );
+  begin
+    perform net.http_post(
+      url := 'https://uyscrptjglpmuscsaqfp.supabase.co/functions/v1/push',
+      body := jsonb_build_object('action', 'event', 'id', new.id),
+      headers := '{"Content-Type": "application/json"}'::jsonb
+    );
+  exception when others then
+    null; -- never block saving a notification
+  end;
   return new;
 end;
 $$;
-revoke execute on function public.push_new_notification() from public, anon, authenticated;
 
 drop trigger if exists notifications_push on public.notifications;
 create trigger notifications_push
