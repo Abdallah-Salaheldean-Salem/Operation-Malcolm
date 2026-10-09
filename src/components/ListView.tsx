@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Project, Task } from "../types";
-import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download } from "lucide-react";
+import { mergeImport } from "../lib/importTasks";
+import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download, Upload } from "lucide-react";
 
 interface ListViewProps {
   project: Project;
@@ -51,6 +52,27 @@ export default function ListView({
     const matchesStatus = activeStatus === "all" || task.status === activeStatus;
     return matchesSearch && matchesPriority && matchesAssignee && matchesStatus;
   });
+
+  // Import tasks from a JSON file (merge; ids already in the space are skipped).
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow picking the same file again
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const { project: merged, summary } = mergeImport(project, data);
+      if (summary.added > 0 || summary.modulesAdded > 0 || summary.tagsAdded > 0) onUpdateProject(merged);
+      const parts = [`${summary.added} task${summary.added === 1 ? "" : "s"} imported`];
+      if (summary.skipped) parts.push(`${summary.skipped} already here (skipped)`);
+      if (summary.modulesAdded) parts.push(`${summary.modulesAdded} module${summary.modulesAdded === 1 ? "" : "s"} added`);
+      if (summary.invalid) parts.push(`${summary.invalid} invalid (ignored)`);
+      setImportMsg({ ok: true, text: parts.join(" · ") });
+    } catch (err) {
+      setImportMsg({ ok: false, text: err instanceof SyntaxError ? "That file isn't valid JSON." : (err as Error).message });
+    }
+  };
 
   const [exporting, setExporting] = useState(false);
   // Export the currently filtered tasks to a real .xlsx (SheetJS loaded on demand).
@@ -103,6 +125,17 @@ export default function ListView({
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
             {filteredTasks.length} task{filteredTasks.length === 1 ? "" : "s"}
           </span>
+          <div className="flex items-center gap-2">
+          <input ref={importInputRef} type="file" accept=".json,application/json" onChange={handleImportFile} className="hidden" />
+          <button
+            id="import-tasks-btn"
+            type="button"
+            onClick={() => importInputRef.current?.click()}
+            className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Import tasks
+          </button>
           <button
             id="export-excel-btn"
             type="button"
@@ -113,7 +146,21 @@ export default function ListView({
             <Download className="w-3.5 h-3.5" />
             {exporting ? "Exporting…" : "Export to Excel"}
           </button>
+          </div>
         </div>
+        {importMsg && (
+          <div
+            id="import-result"
+            className={`mb-4 flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-xs font-semibold ${
+              importMsg.ok
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                : "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400"
+            }`}
+          >
+            <span>{importMsg.ok ? "✓ " : "✕ "}{importMsg.text}</span>
+            <button type="button" onClick={() => setImportMsg(null)} className="opacity-70 hover:opacity-100">✕</button>
+          </div>
+        )}
         {project.columns.map((col) => {
           const colTasks = filteredTasks.filter(t => t.status === col.id);
           if (colTasks.length === 0) return null;
