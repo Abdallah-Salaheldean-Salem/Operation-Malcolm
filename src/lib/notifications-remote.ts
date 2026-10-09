@@ -38,10 +38,19 @@ export async function fetchNotifications(recipient: string): Promise<RemoteNotif
 
 export async function insertNotifications(rows: NewNotification[]): Promise<void> {
   if (!isSupabaseConfigured || rows.length === 0) return;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("notifications")
-    .upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true });
-  if (error) console.warn("Supabase notifications insert failed", error);
+    .upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true })
+    .select("id");
+  if (error) {
+    console.warn("Supabase notifications insert failed", error);
+    return;
+  }
+  // Ask the push function to deliver them to the recipients' devices (Phase 3).
+  // It claims each row once, so a database trigger doing the same is harmless.
+  for (const { id } of (data || []) as { id: string }[]) {
+    supabase.functions.invoke("push", { body: { action: "event", id } }).catch(() => {});
+  }
 }
 
 export async function markNotificationsRead(ids: string[]): Promise<void> {

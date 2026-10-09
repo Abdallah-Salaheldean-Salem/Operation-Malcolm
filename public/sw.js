@@ -77,3 +77,22 @@ self.addEventListener('notificationclick', (event) => {
     })
   );
 });
+
+// Web Push (Phase 3): reminders and teammate updates delivered while the app is closed.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'Task update', body: event.data ? event.data.text() : '' };
+  }
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Task update', {
+      body: data.body || '',
+      tag: data.tag,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: data.url || '/' },
+    })
+  );
+});

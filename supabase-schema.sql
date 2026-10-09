@@ -99,3 +99,6 @@ create policy "Public full access" on public.notification_reads
 
 -- Live delivery to open apps.
 alter publication supabase_realtime add table public.notifications;
+
+-- Phase 3 (Web Push): see supabase/push-setup.sql (project-specific URLs)
+-- and the `push` edge function in supabase/functions/push.

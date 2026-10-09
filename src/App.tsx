@@ -18,6 +18,7 @@ import IdentityModal from "./components/IdentityModal";
 import NotificationBell, { PopupPermission } from "./components/NotificationBell";
 import { loadMe, saveMe, sameName, nameKey } from "./lib/identity";
 import { diffTaskEvents } from "./lib/notificationEvents";
+import { PushState, getPushState, enablePush, disablePush, sendTestPush, resyncPush } from "./lib/push";
 import {
   RemoteNotification,
   fetchNotifications,
@@ -857,6 +858,41 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alerts, popupPermission]);
 
+  // Web Push (Phase 3): notifications while the app is closed.
+  const [pushState, setPushState] = useState<PushState>("unsupported");
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMessage, setPushMessage] = useState<string | null>(null);
+  useEffect(() => {
+    getPushState().then(setPushState).catch(() => setPushState("unsupported"));
+  }, []);
+  useEffect(() => {
+    if (myKey && pushState === "on") resyncPush(myKey);
+  }, [myKey, pushState]);
+  const runPush = async (fn: () => Promise<PushState | boolean>, failMsg: string) => {
+    setPushBusy(true);
+    setPushMessage(null);
+    try {
+      const res = await fn();
+      if (typeof res === "boolean") {
+        if (!res) setPushMessage(failMsg);
+      } else {
+        setPushState(res);
+      }
+      if (popupsSupported()) setPopupPermission(Notification.permission as PopupPermission);
+    } catch (err) {
+      console.warn("push", err);
+      setPushMessage(failMsg);
+    } finally {
+      setPushBusy(false);
+    }
+  };
+  const onEnablePush = () => {
+    if (!myKey) return requestIdentity();
+    runPush(() => enablePush(myKey), "Couldn't turn on notifications — please try again.");
+  };
+  const onDisablePush = () => runPush(() => disablePush(), "Couldn't turn off notifications.");
+  const onTestPush = () => runPush(() => sendTestPush(), "Test push failed — try turning notifications off and on.");
+
   const openAlert = (a: TaskAlert) => {
     markRead([a.key]);
     const proj = projects.find((p) => p.id === a.projectId);
@@ -874,6 +910,12 @@ export default function App() {
     onMarkAllRead: () => markRead(alerts.map((a) => a.key)),
     onEnablePopups: enablePopups,
     onSwitchIdentity: requestIdentity,
+    pushState,
+    pushBusy,
+    pushMessage,
+    onEnablePush,
+    onDisablePush,
+    onTestPush,
   };
 
   // Save Task (Create or Update)

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Bell, BellRing, CheckCheck } from "lucide-react";
 import { TaskAlert } from "../lib/notifications";
+import { PushState } from "../lib/push";
 
 export type PopupPermission = "default" | "granted" | "denied" | "unsupported";
 
@@ -13,6 +14,12 @@ interface NotificationBellProps {
   onMarkAllRead: () => void;
   onEnablePopups: () => void;
   onSwitchIdentity: () => void;
+  pushState?: PushState;
+  pushBusy?: boolean;
+  pushMessage?: string | null;
+  onEnablePush?: () => void;
+  onDisablePush?: () => void;
+  onTestPush?: () => void;
   size?: "sm" | "md";
 }
 
@@ -34,7 +41,8 @@ const ago = (iso?: string) => {
 };
 
 export default function NotificationBell({
-  alerts, readKeys, me, popupPermission, onOpenAlert, onMarkAllRead, onEnablePopups, onSwitchIdentity, size = "md",
+  alerts, readKeys, me, popupPermission, onOpenAlert, onMarkAllRead, onEnablePopups, onSwitchIdentity,
+  pushState = "unsupported", pushBusy = false, pushMessage = null, onEnablePush, onDisablePush, onTestPush, size = "md",
 }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -135,7 +143,32 @@ export default function NotificationBell({
           </div>
 
           <div className="px-3.5 py-2 border-t border-slate-200 dark:border-[#262B35] bg-slate-50 dark:bg-[#14171C] space-y-1.5">
-            {popupPermission === "default" && (
+            {pushState === "off" && onEnablePush && (
+              <button
+                data-testid="push-enable"
+                disabled={pushBusy}
+                onClick={onEnablePush}
+                className="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-[11px] font-bold text-white"
+              >
+                {pushBusy ? "Turning on…" : "Notify me even when the app is closed"}
+              </button>
+            )}
+            {pushState === "on" && (
+              <div className="flex items-center justify-between gap-2 text-[10px]">
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Lock-screen notifications on</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <button disabled={pushBusy} onClick={onTestPush} className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline disabled:opacity-60">Send test</button>
+                  <button disabled={pushBusy} onClick={onDisablePush} className="font-bold text-slate-500 hover:underline disabled:opacity-60">Turn off</button>
+                </span>
+              </div>
+            )}
+            {pushState === "needs-install" && (
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                On iPhone/iPad: tap <b>Share → Add to Home Screen</b>, then open the app from your home screen to turn on notifications.
+              </p>
+            )}
+            {pushMessage && <p className="text-[10px] text-amber-600 dark:text-amber-400">{pushMessage}</p>}
+            {(pushState === "unsupported" || pushState === "needs-install") && popupPermission === "default" && (
               <button onClick={onEnablePopups} className="w-full py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
                 Enable pop-up notifications on this device
               </button>
@@ -143,7 +176,7 @@ export default function NotificationBell({
             {popupPermission === "denied" && (
               <p className="text-[10px] text-slate-500 dark:text-slate-400">Pop-ups are blocked — allow notifications for this site in your browser settings.</p>
             )}
-            {popupPermission === "granted" && (
+            {popupPermission === "granted" && pushState !== "on" && (
               <p className="text-[10px] text-emerald-600 dark:text-emerald-400">Pop-ups on — shown while the app is open or in the background.</p>
             )}
             {me && (
