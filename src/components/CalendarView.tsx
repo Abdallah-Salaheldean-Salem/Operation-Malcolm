@@ -46,6 +46,12 @@ export default function CalendarView({
     () => typeof window === "undefined" || window.innerWidth >= 768
   );
 
+  // Local "YYYY-MM-DD" (toISOString() would convert to UTC and shift the day).
+  const localISO = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  // Phone layout: the day whose tasks are listed under the compact month grid.
+  const [selectedDay, setSelectedDay] = useState<string>(() => localISO(new Date()));
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -60,6 +66,7 @@ export default function CalendarView({
 
   const handleToday = () => {
     setCurrentDate(new Date());
+    setSelectedDay(localISO(new Date()));
   };
 
   // Helper: Month name array
@@ -175,7 +182,7 @@ export default function CalendarView({
       cells.push({
         date: d,
         isCurrentMonth: false,
-        dateStr: d.toISOString().split("T")[0]
+        dateStr: localISO(d)
       });
     }
 
@@ -185,7 +192,7 @@ export default function CalendarView({
       cells.push({
         date: d,
         isCurrentMonth: true,
-        dateStr: d.toISOString().split("T")[0]
+        dateStr: localISO(d)
       });
     }
 
@@ -196,7 +203,7 @@ export default function CalendarView({
       cells.push({
         date: d,
         isCurrentMonth: false,
-        dateStr: d.toISOString().split("T")[0]
+        dateStr: localISO(d)
       });
       nextMonthDay++;
     }
@@ -284,9 +291,9 @@ export default function CalendarView({
       <div className="flex-1 flex flex-col h-full overflow-hidden p-3 md:p-6 border-r border-slate-200 dark:border-[#1E222B]">
         
         {/* Navigation Toolbar */}
-        <div id="calendar-view-toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-[#1E222B] mb-4">
+        <div id="calendar-view-toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200 dark:border-[#1E222B] mb-3 sm:mb-4">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <div className="hidden sm:flex w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 items-center justify-center text-indigo-600 dark:text-indigo-400">
               <CalendarDays className="w-5 h-5" />
             </div>
             <div>
@@ -296,13 +303,13 @@ export default function CalendarView({
                   {monthScheduledCount} scheduled
                 </span>
               </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Manage dates, schedule milestones, and drag tasks onto the interactive timeline.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             {/* Nav Controllers */}
             <div className="flex items-center bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg p-0.5 shadow-xs">
               <button
@@ -313,7 +320,7 @@ export default function CalendarView({
                 <ChevronLeft className="w-4 h-4" />
               </button>
               
-              <span className="px-3 text-xs font-bold font-mono text-slate-700 dark:text-slate-350 select-none min-w-[120px] text-center">
+              <span className="px-2 sm:px-3 text-xs font-bold text-slate-700 dark:text-slate-200 select-none min-w-[104px] sm:min-w-[120px] text-center">
                 {monthNames[month]} {year}
               </span>
 
@@ -341,7 +348,8 @@ export default function CalendarView({
                   : "bg-white dark:bg-[#14171C] border-slate-200 dark:border-[#1E222B] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
-              {showUnscheduled ? "Hide Sidebar" : "Unscheduled List"}
+              <span className="hidden sm:inline">{showUnscheduled ? "Hide Sidebar" : "Unscheduled List"}</span>
+              <span className="sm:hidden">Backlog{unscheduledTasks.length ? ` (${unscheduledTasks.length})` : ""}</span>
             </button>
           </div>
         </div>
@@ -361,8 +369,117 @@ export default function CalendarView({
           </div>
         )}
 
+        {/* Phone: compact month + agenda for the selected day */}
+        <div id="calendar-mobile" className="md:hidden flex-1 overflow-y-auto pb-4">
+          <div className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl overflow-hidden">
+            <div className="grid grid-cols-7 bg-slate-50 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#1E222B]">
+              {weekdayNames.map((day) => (
+                <div key={day} className="py-1.5 text-center text-[10px] font-black uppercase text-slate-500 dark:text-slate-400">
+                  {day.charAt(0)}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {calendarCells.map(({ date, isCurrentMonth, dateStr }, idx) => {
+                const dayTasks = filteredTasks.filter((t) => t.dueDate === dateStr);
+                const isSel = selectedDay === dateStr;
+                const isTodayCell = isToday(date);
+                return (
+                  <button
+                    key={`m-${dateStr}-${idx}`}
+                    type="button"
+                    data-testid="cal-day"
+                    onClick={() => {
+                      if (armedTaskId) handleCellTap(dateStr);
+                      setSelectedDay(dateStr);
+                      if (!isCurrentMonth) setCurrentDate(new Date(date.getFullYear(), date.getMonth(), 1));
+                    }}
+                    className={`h-12 flex flex-col items-center pt-1 gap-1 border-b border-r border-slate-100 dark:border-[#1A1E26] [&:nth-child(7n)]:border-r-0 ${
+                      armedTaskId ? "active:bg-indigo-500/20" : "active:bg-slate-100 dark:active:bg-[#1A1E26]"
+                    }`}
+                  >
+                    <span
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                        isSel
+                          ? "bg-indigo-600 text-white"
+                          : isTodayCell
+                          ? "ring-1 ring-indigo-500 text-indigo-600 dark:text-indigo-300"
+                          : isCurrentMonth
+                          ? "text-slate-700 dark:text-slate-200"
+                          : "text-slate-300 dark:text-slate-600"
+                      }`}
+                    >
+                      {date.getDate()}
+                    </span>
+                    <span className="flex items-center gap-0.5 h-1.5">
+                      {dayTasks.slice(0, 3).map((t) => (
+                        <span key={t.id} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getStatusBorderColor(t.status) }} />
+                      ))}
+                      {dayTasks.length > 3 && <span className="text-[8px] leading-none font-bold text-slate-400">+</span>}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {(() => {
+            const agenda = filteredTasks.filter((t) => t.dueDate === selectedDay);
+            return (
+              <div className="mt-4">
+                <div className="flex items-baseline justify-between mb-2 px-0.5">
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                    {new Date(`${selectedDay}T00:00:00`).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                  </h3>
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                    {agenda.length} due
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {agenda.length === 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 py-4 text-center">Nothing due this day.</p>
+                  )}
+                  {agenda.map((task) => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      data-testid="cal-agenda-item"
+                      onClick={() => onOpenTaskModal(task)}
+                      style={{ borderLeftColor: getStatusBorderColor(task.status) }}
+                      className="w-full text-left bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] border-l-4 rounded-xl px-3 py-2.5 active:bg-slate-50 dark:active:bg-[#1A1E26]"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2">
+                          {task.isMilestone ? "◆ " : ""}{task.title}
+                        </span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0 border ${getPriorityBadgeStyles(task.priority)}`}>
+                          {task.priority}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-3 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="inline-flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {task.assignee || "Unassigned"}
+                        </span>
+                        <span>{project.columns.find((c) => c.id === task.status)?.title}</span>
+                      </div>
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onOpenTaskModal(null, undefined, { startDate: selectedDay, dueDate: selectedDay })}
+                    className="w-full py-2.5 rounded-xl border border-dashed border-slate-300 dark:border-[#2A303B] text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1.5 active:bg-slate-100 dark:active:bg-[#1A1E26]"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add task on this day
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+
         {/* Calendar Grid Container */}
-        <div className="flex-1 overflow-auto bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl shadow-xs flex flex-col">
+        <div className="hidden md:flex flex-1 overflow-auto bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl shadow-xs flex-col">
           <div className="flex-1 flex flex-col min-w-[700px]">
             {/* Weekdays Headers */}
             <div className="grid grid-cols-7 border-b border-slate-200 dark:border-[#1E222B] bg-slate-50 dark:bg-[#0B0D11] select-none sticky top-0 z-10">

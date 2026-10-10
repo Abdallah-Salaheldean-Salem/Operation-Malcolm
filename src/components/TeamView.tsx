@@ -154,11 +154,14 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
   return (
     <div id="team-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6">      
       {/* View Header */}
-      <div id="team-header-block" className="flex items-center justify-between">
-        <div className="flex items-center space-x-2.5">
-          <Users className="w-5 h-5 text-indigo-500" />
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Team Resource Allocation</h2>
-          <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-semibold uppercase tracking-wide">
+      <div id="team-header-block" className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Users className="w-5 h-5 text-indigo-500 shrink-0" />
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider truncate">
+            <span className="hidden sm:inline">Team Resource Allocation</span>
+            <span className="sm:hidden">Team</span>
+          </h2>
+          <span className="hidden sm:inline text-[10px] bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded font-semibold uppercase tracking-wide">
             Workload Breakdown View
           </span>
         </div>
@@ -168,10 +171,12 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
           <button 
             id="add-member-trigger-btn"
             onClick={() => setIsAddMemberOpen(true)}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
+            className="shrink-0 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-sm cursor-pointer"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>Add Team Member</span>
+            <span>
+              Add<span className="hidden sm:inline"> Team</span> Member
+            </span>
           </button>
         </div>
       </div>

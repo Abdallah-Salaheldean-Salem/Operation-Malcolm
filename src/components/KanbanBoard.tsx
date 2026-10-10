@@ -331,7 +331,7 @@ export default function KanbanBoard({
   return (
     <div id="kanban-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1">
       {/* Board Top Toolbar */}
-      <div id="kanban-toolbar" className="p-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
+      <div id="kanban-toolbar" className="p-3 sm:p-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2.5 sm:gap-4">
         {/* Live board stats + active-filter chips */}
         <div id="kanban-board-summary" className="flex flex-wrap items-center gap-1.5 min-w-0 text-[11px] font-semibold">
           <span className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] text-slate-700 dark:text-slate-300">
@@ -371,7 +371,7 @@ export default function KanbanBoard({
         </div>
 
         {/* Action button */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Layout Mode Switcher */}
           <div className="flex items-center bg-white dark:bg-[#14171C]/60 p-1 border border-slate-200 dark:border-slate-800 rounded-xl">
             <button
@@ -388,7 +388,8 @@ export default function KanbanBoard({
               }`}
             >
               <BarChart2 className="w-3.5 h-3.5" />
-              <span>Pivot Summary</span>
+              <span className="hidden sm:inline">Pivot Summary</span>
+              <span className="sm:hidden">Summary</span>
             </button>
             <button
               id="switch-to-kanban-btn"
@@ -401,7 +402,8 @@ export default function KanbanBoard({
               }`}
             >
               <LayoutList className="w-3.5 h-3.5" />
-              <span>Kanban Board</span>
+              <span className="hidden sm:inline">Kanban Board</span>
+              <span className="sm:hidden">Board</span>
             </button>
           </div>
 
@@ -411,15 +413,19 @@ export default function KanbanBoard({
             className="px-3.5 py-1.5 bg-slate-50 dark:bg-[#1C1F26] hover:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Add Status</span>
+            <span>
+              <span className="hidden sm:inline">Add </span>Status
+            </span>
           </button>
           <button
             id="kanban-add-task-btn"
             onClick={() => onOpenTaskModal(null)}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
+            className="ml-auto sm:ml-0 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center space-x-1.5 shadow-sm transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>New Task</span>
+            <span>
+              <span className="hidden sm:inline">New </span>Task
+            </span>
           </button>
         </div>
       </div>

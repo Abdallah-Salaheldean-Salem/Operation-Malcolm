@@ -196,21 +196,21 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
     <div id="modules-view-root" className="flex flex-col h-full flex-1 overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-4 md:p-6 space-y-6 select-none">
       {/* ============ SMART GOALS SECTION ============ */}
       <section id="smart-goals-section">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center space-x-2">
-            <Target className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
-            <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">SMART Goals</h2>
-            <span className="text-[9px] px-2 py-0.5 rounded font-bold bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Target className="w-5 h-5 text-indigo-500 dark:text-indigo-400 shrink-0" />
+            <h2 className="text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white whitespace-nowrap">SMART Goals</h2>
+            <span className="hidden sm:inline text-[9px] px-2 py-0.5 rounded font-bold bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 dark:text-indigo-400 uppercase tracking-wider">
               Specific · Measurable · Achievable · Relevant · Time-bound
             </span>
           </div>
           <button
             id="add-goal-btn"
             onClick={() => setEditingGoal("new")}
-            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 cursor-pointer shadow-sm"
+            className="shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg flex items-center space-x-1.5 cursor-pointer shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>New Goal</span>
+            <span className="whitespace-nowrap">New Goal</span>
           </button>
         </div>
 

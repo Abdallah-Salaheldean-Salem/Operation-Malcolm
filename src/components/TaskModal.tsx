@@ -942,7 +942,7 @@ export default function TaskModal({
                     }
                     e.target.value = ""; // reset selection
                   }}
-                  className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none flex-1 font-medium cursor-pointer"
+                  className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none flex-1 min-w-0 w-full font-medium cursor-pointer"
                 >
                   <option value="">Link a Predecessor Task...</option>
                   {allTasks

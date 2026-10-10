@@ -58,6 +58,10 @@ export default function ListView({
     }
   };
 
+  // "YYYY-MM-DD" → "Oct 12" in local time (new Date("YYYY-MM-DD") would be UTC).
+  const shortDate = (iso?: string) =>
+    iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+
   const activeSearch = globalSearch || "";
   const activePriority = globalPriority || "all";
   const activeAssignee = globalAssignee || "all";
@@ -200,26 +204,28 @@ export default function ListView({
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2">
           <input ref={importInputRef} type="file" accept=".json,application/json" onChange={handleImportFile} className="hidden" />
           <button
             id="import-template-btn"
             type="button"
             onClick={downloadImportTemplate}
             title="Download a template + guide you can give to an AI to prepare an import file"
-            className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20 rounded-lg px-3 py-1.5 transition-colors"
+            aria-label="Download import template" className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20 rounded-lg px-3 py-1.5 transition-colors"
           >
             <FileText className="w-3.5 h-3.5" />
-            Template
+            <span className="hidden sm:inline">Template</span>
           </button>
           <button
             id="import-tasks-btn"
             type="button"
             onClick={() => importInputRef.current?.click()}
+            title="Import tasks"
+            aria-label="Import tasks"
             className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-lg px-3 py-1.5 transition-colors"
           >
             <Upload className="w-3.5 h-3.5" />
-            Import tasks
+            <span className="hidden sm:inline">Import tasks</span>
           </button>
           <button
             id="export-excel-btn"
@@ -229,7 +235,8 @@ export default function ListView({
             className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/20 rounded-lg px-3 py-1.5 transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            {exporting ? "Exporting…" : "Export to Excel"}
+            <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export to Excel"}</span>
+            <span className="sm:hidden">{exporting ? "…" : "Excel"}</span>
           </button>
           </div>
         </div>
@@ -286,7 +293,75 @@ export default function ListView({
 
               {/* Group Tasks Table (Spreadsheet style) */}
               {isExpanded && (
-                <div className="ml-0 sm:ml-6 border border-slate-200 dark:border-slate-800 rounded-md overflow-x-auto bg-white dark:bg-[#14171C] shadow-sm">
+                <div className="md:hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#14171C] overflow-hidden divide-y divide-slate-100 dark:divide-slate-800/70">
+                  {colTasks.map((task) => {
+                    const sub = task.subtasks || [];
+                    const subDone = sub.filter((x) => x.completed).length;
+                    const comments = (task.comments || []).length;
+                    const assigned = task.assignee && task.assignee !== "Unassigned";
+                    return (
+                      <button
+                        key={task.id}
+                        type="button"
+                        data-testid="task-card"
+                        onClick={() => onOpenTaskModal(task)}
+                        className="w-full text-left flex gap-3 px-3 py-2.5 active:bg-slate-50 dark:active:bg-[#1C1F26] border-l-4"
+                        style={{ borderLeftColor: col.color }}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] font-semibold text-slate-800 dark:text-slate-100 leading-snug line-clamp-2">
+                            {task.isMilestone ? "◆ " : ""}{task.title}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-px rounded font-bold uppercase text-[9px] tracking-wider ${getPriorityColor(task.priority)}`}>
+                              <Flag className="w-2.5 h-2.5" />
+                              {task.priority}
+                            </span>
+                            {(task.startDate || task.dueDate) && (
+                              <span className="inline-flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {task.startDate && task.startDate !== task.dueDate ? `${shortDate(task.startDate)} – ` : ""}
+                                {shortDate(task.dueDate)}
+                              </span>
+                            )}
+                            {(task.actualHours || task.estimatedHours) ? (
+                              <span className="font-mono">
+                                {task.actualHours || 0}h{task.estimatedHours ? `/${task.estimatedHours}h` : ""}
+                              </span>
+                            ) : null}
+                            {sub.length > 0 && <span>☑ {subDone}/{sub.length}</span>}
+                            {comments > 0 && (
+                              <span className="inline-flex items-center gap-0.5">
+                                <MessageSquare className="w-3 h-3" />
+                                {comments}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span
+                          title={assigned ? task.assignee : "Unassigned"}
+                          className={`mt-0.5 w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[10px] font-black ${
+                            assigned
+                              ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300"
+                              : "border border-dashed border-slate-300 dark:border-slate-700 text-slate-400"
+                          }`}
+                        >
+                          {assigned ? task.assignee.substring(0, 2).toUpperCase() : "?"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => onOpenTaskModal(null, col.id)}
+                    className="w-full flex items-center gap-1.5 px-3 py-2.5 text-xs font-semibold text-slate-400 active:bg-slate-50 dark:active:bg-[#1C1F26]"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> New task
+                  </button>
+                </div>
+              )}
+              {isExpanded && (
+                <div className="hidden md:block ml-0 sm:ml-6 border border-slate-200 dark:border-slate-800 rounded-md overflow-x-auto bg-white dark:bg-[#14171C] shadow-sm">
                   <table className="w-full text-left border-collapse min-w-[820px]">
                     <thead className="bg-slate-50 dark:bg-[#1C1F26] border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 tracking-wider">
                       <tr>
@@ -327,7 +402,7 @@ export default function ListView({
                           <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer text-xs" onClick={() => onOpenTaskModal(task)}>
                             {task.startDate ? (
                               <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-400">
-                                <span>{new Date(task.startDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                <span>{shortDate(task.startDate)}</span>
                               </div>
                             ) : (
                               <span className="text-slate-400 italic">-</span>
@@ -336,7 +411,7 @@ export default function ListView({
                           <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer text-xs" onClick={() => onOpenTaskModal(task)}>
                             {task.dueDate ? (
                               <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-400">
-                                <span>{new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                <span>{shortDate(task.dueDate)}</span>
                               </div>
                             ) : (
                               <span className="text-slate-400 italic">-</span>
