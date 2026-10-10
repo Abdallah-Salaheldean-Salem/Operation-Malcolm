@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import DateInput from "./DateInput";
 import { Project, Task, ProjectModule, SmartGoal, ModuleReadiness } from "../types";
 import { MODULE_READINESS } from "../data";
 import {
@@ -909,7 +910,7 @@ function GoalEditor({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-bold text-[10px] uppercase text-indigo-500 dark:text-indigo-400 mb-1.5">T — Time-bound</label>
-              <input type="date" value={g.timeBound} onChange={(e) => set({ timeBound: e.target.value })} className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500" />
+              <DateInput value={g.timeBound} onChange={(e) => set({ timeBound: e.target.value })} className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500" />
             </div>
             <div>
               <label className="block font-bold text-[10px] uppercase text-slate-500 dark:text-slate-400 mb-1.5">Linked Modules</label>

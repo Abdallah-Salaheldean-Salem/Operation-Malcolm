@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import DateInput from "./DateInput";
 import { Project, Task, BoardColumn, TaskPriority } from "../types";
 import { PRIORITIES } from "../data";
 import {
@@ -1253,8 +1254,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                   <label className={`block text-[9px] font-black uppercase mb-1 ${"text-slate-500 dark:text-slate-400"}`}>
                     Start Date
                   </label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={quickStart}
                     onChange={(e) => setQuickStart(e.target.value)}
                     className={`w-full border rounded-lg px-2.5 py-1.5 focus:outline-none text-[10px] font-mono ${
@@ -1266,8 +1266,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                   <label className={`block text-[9px] font-black uppercase mb-1 ${"text-slate-500 dark:text-slate-400"}`}>
                     Due Date
                   </label>
-                  <input
-                    type="date"
+                  <DateInput
                     value={quickDue}
                     onChange={(e) => setQuickDue(e.target.value)}
                     className={`w-full border rounded-lg px-2.5 py-1.5 focus:outline-none text-[10px] font-mono ${

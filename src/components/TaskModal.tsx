@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import DateInput from "./DateInput";
 import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
@@ -725,9 +726,8 @@ export default function TaskModal({
                   <Calendar className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                   <span>Start Date</span>
                 </label>
-                <input
+                <DateInput
                   id="task-start-date"
-                  type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
@@ -738,9 +738,8 @@ export default function TaskModal({
                   <Calendar className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                   <span>Due Date</span>
                 </label>
-                <input
+                <DateInput
                   id="task-due-date"
-                  type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                   className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
@@ -756,9 +755,8 @@ export default function TaskModal({
                     <Flag className="w-3 h-3 text-rose-500" />
                     <span>Deadline</span>
                   </label>
-                  <input
+                  <DateInput
                     id="task-deadline"
-                    type="date"
                     value={deadline}
                     onChange={(e) => setDeadline(e.target.value)}
                     className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
@@ -785,9 +783,8 @@ export default function TaskModal({
                   <label htmlFor="task-constraint-date" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
                     Constraint date
                   </label>
-                  <input
+                  <DateInput
                     id="task-constraint-date"
-                    type="date"
                     value={constraintDate}
                     onChange={(e) => setConstraintDate(e.target.value)}
                     className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
