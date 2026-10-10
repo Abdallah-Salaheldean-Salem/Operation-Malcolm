@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { Project, Task } from "../types";
 import { mergeImport } from "../lib/importTasks";
 import { buildImportGuide } from "../lib/importTemplate";
+import CommentsView, { commentTime, formatCommentDate } from "./CommentsView";
 import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download, Upload, FileText } from "lucide-react";
 
 interface ListViewProps {
@@ -24,6 +25,22 @@ export default function ListView({
   globalStatus,
 }: ListViewProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  // Sub-tabs: the task table, or every comment on the tasks in one place.
+  const [subTab, setSubTabState] = useState<"tasks" | "comments">(() => {
+    try {
+      return localStorage.getItem("spreadsheet_subtab") === "comments" ? "comments" : "tasks";
+    } catch {
+      return "tasks";
+    }
+  });
+  const setSubTab = (tab: "tasks" | "comments") => {
+    setSubTabState(tab);
+    try {
+      localStorage.setItem("spreadsheet_subtab", tab);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const toggleGroup = (statusId: string) => {
     setExpandedGroups(prev => ({
@@ -89,14 +106,40 @@ export default function ListView({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const commentedTasks = filteredTasks.filter((t) => (t.comments || []).length > 0);
+  const commentTotal = commentedTasks.reduce((n, t) => n + t.comments.length, 0);
+
   const [exporting, setExporting] = useState(false);
-  // Export the currently filtered tasks to a real .xlsx (SheetJS loaded on demand).
+  // Export the currently filtered tasks (or, on the Comments tab, their comments)
+  // to a real .xlsx (SheetJS loaded on demand).
   const exportToExcel = async () => {
-    if (filteredTasks.length === 0 || exporting) return;
+    if (exporting || (subTab === "comments" ? commentTotal === 0 : filteredTasks.length === 0)) return;
     setExporting(true);
     try {
       const XLSX = await import("xlsx");
       const colTitle = (id: string) => project.columns.find((c) => c.id === id)?.title || id;
+      const safeName = ((project.name || "tasks").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "tasks";
+      const today = new Date().toISOString().split("T")[0];
+      if (subTab === "comments") {
+        const rows = commentedTasks.flatMap((t) =>
+          [...t.comments]
+            .sort((a, b) => commentTime(a) - commentTime(b))
+            .map((c) => ({
+              Task: t.title,
+              Status: colTitle(t.status),
+              Assignee: t.assignee || "Unassigned",
+              Author: c.author || "",
+              Date: formatCommentDate(c),
+              Comment: c.text,
+            }))
+        );
+        const ws = XLSX.utils.json_to_sheet(rows);
+        ws["!cols"] = [{ wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 80 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Comments");
+        XLSX.writeFile(wb, `${safeName}_comments_${today}.xlsx`);
+        return;
+      }
       const done = (arr?: { completed: boolean }[]) => (arr || []).filter((s) => s.completed).length;
       const rows = filteredTasks.map((t) => ({
         Status: colTitle(t.status),
@@ -120,9 +163,7 @@ export default function ListView({
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Tasks");
-      const safe = ((project.name || "tasks").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "tasks";
-      const stamp = new Date().toISOString().split("T")[0];
-      XLSX.writeFile(wb, `${safe}_${stamp}.xlsx`);
+      XLSX.writeFile(wb, `${safeName}_${today}.xlsx`);
     } catch (err) {
       console.error("Excel export failed", err);
       alert("Sorry — the Excel export failed. Please try again.");
@@ -136,11 +177,30 @@ export default function ListView({
       {/* ClickUp Style Spreadsheet / List View */}
       <div className="p-3 sm:p-6 max-w-[1400px] w-full mx-auto">
         {/* Toolbar: task count + Excel export */}
-        <div className="flex items-center justify-between mb-4">
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-            {filteredTasks.length} task{filteredTasks.length === 1 ? "" : "s"}
-          </span>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
+            {([
+              ["tasks", "Tasks", filteredTasks.length, LayoutList],
+              ["comments", "Comments", commentTotal, MessageSquare],
+            ] as const).map(([id, label, count, Icon]) => (
+              <button
+                key={id}
+                id={`spreadsheet-tab-${id}`}
+                type="button"
+                onClick={() => setSubTab(id)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-colors ${
+                  subTab === id
+                    ? "bg-white dark:bg-[#1E222B] text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {label}
+                <span className="text-[10px] font-semibold text-slate-400">{count}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
           <input ref={importInputRef} type="file" accept=".json,application/json" onChange={handleImportFile} className="hidden" />
           <button
             id="import-template-btn"
@@ -165,7 +225,7 @@ export default function ListView({
             id="export-excel-btn"
             type="button"
             onClick={exportToExcel}
-            disabled={filteredTasks.length === 0 || exporting}
+            disabled={(subTab === "comments" ? commentTotal === 0 : filteredTasks.length === 0) || exporting}
             className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-500/20 rounded-lg px-3 py-1.5 transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
@@ -186,7 +246,10 @@ export default function ListView({
             <button type="button" onClick={() => setImportMsg(null)} className="opacity-70 hover:opacity-100">✕</button>
           </div>
         )}
-        {project.columns.map((col) => {
+        {subTab === "comments" && (
+          <CommentsView project={project} tasks={filteredTasks} onOpenTask={(t) => onOpenTaskModal(t)} />
+        )}
+        {subTab === "tasks" && project.columns.map((col) => {
           const colTasks = filteredTasks.filter(t => t.status === col.id);
           if (colTasks.length === 0) return null;
           
@@ -316,7 +379,7 @@ export default function ListView({
             </div>
           );
         })}
-        {filteredTasks.length === 0 && (
+        {subTab === "tasks" && filteredTasks.length === 0 && (
           <div className="text-center py-20 text-slate-500">
              No tasks match the current filters.
           </div>
