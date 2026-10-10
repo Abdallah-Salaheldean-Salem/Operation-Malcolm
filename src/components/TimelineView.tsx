@@ -33,7 +33,10 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
   const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
   const [currentYear, setCurrentYear] = useState(2024);
   const [currentMonth, setCurrentMonth] = useState(0); // Jan
-  const [zoomMode, setZoomMode] = useState<"day" | "week" | "month">("day");
+  // Phones start zoomed out to weeks so more of the plan fits on screen.
+  const [zoomMode, setZoomMode] = useState<"day" | "week" | "month">(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? "week" : "day"
+  );
   const [groupBy, setGroupBy] = useState<"none" | "status" | "assignee" | "priority">("status");
   const [isCriticalPathEnabled, setIsCriticalPathEnabled] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -520,7 +523,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
       {/* ClickUp Toolbar Controls */}
       <div
         id="gantt-control-bar"
-        className={`p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3 shrink-0 ${
+        className={`p-3 md:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 md:gap-3 shrink-0 ${
           "bg-white dark:bg-[#14171C] border-b border-slate-200 dark:border-slate-800"
         }`}
       >
@@ -531,7 +534,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
               Timeline Scheduler
             </h2>
             <span
-              className={`text-[9px] px-2 py-0.5 rounded font-black font-mono border ${
+              className={`hidden md:inline text-[9px] px-2 py-0.5 rounded font-black font-mono border ${
                 isLight
                   ? "bg-indigo-50 border-indigo-200 text-indigo-700"
                   : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
@@ -541,7 +544,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
             </span>
           </div>
 
-          <div className={`h-4 w-px ${"bg-slate-200 dark:bg-slate-800"}`} />
+          <div className={`hidden md:block h-4 w-px ${"bg-slate-200 dark:bg-slate-800"}`} />
 
           {/* Scale Zooms */}
           <div
@@ -734,7 +737,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
         {/* Left Side dynamic task spreadsheet */}
         <div
           id="gantt-sidebar-pane"
-          className={`w-[60vw] md:w-[320px] lg:w-[480px] shrink-0 border-r flex flex-col overflow-x-auto overflow-y-auto select-none divide-y ${
+          className={`w-[42vw] min-w-[150px] md:min-w-0 md:w-[320px] lg:w-[480px] shrink-0 border-r flex flex-col overflow-x-auto overflow-y-auto select-none divide-y ${
             "bg-white dark:bg-[#101216] border-slate-200 dark:border-slate-800 divide-slate-800/40"
           }`}
         >
@@ -767,14 +770,14 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                       : "bg-white dark:bg-[#14171C]/40 hover:bg-white dark:hover:bg-[#14171C] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800"
                   }`}
                 >
-                  <div className="flex items-center space-x-2 truncate">
-                    <span className="inline-flex items-center justify-center w-4 h-4 rounded border border-slate-300 bg-white text-slate-500 dark:text-slate-600 text-[9px] font-black">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded border border-slate-300 bg-white text-slate-500 dark:text-slate-600 text-[9px] font-black">
                       {isCollapsed ? "+" : "-"}
                     </span>
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: row.color }} />
                     <span className="truncate">{row.label}</span>
                     <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                      className={`shrink-0 text-[9px] font-bold px-1.5 py-0.2 rounded font-mono ${
                         "bg-slate-800 text-slate-500 dark:text-slate-400"
                       }`}
                     >
@@ -783,7 +786,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                   </div>
 
                   {row.count > 0 && (
-                    <div className="flex items-center space-x-2 shrink-0">
+                    <div className="hidden md:flex items-center space-x-2 shrink-0">
                       <div className={`w-14 h-1 rounded-full overflow-hidden ${"bg-slate-200 dark:bg-slate-800"}`}>
                         <div className="h-full bg-indigo-500" style={{ width: `${row.progressAvg}%` }} />
                       </div>
@@ -1181,7 +1184,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
       {/* Legend guide rules bar */}
       <div
         id="gantt-view-legend"
-        className={`p-3 text-[10px] flex flex-wrap justify-between items-center gap-3 shrink-0 border-t ${
+        className={`hidden md:flex p-3 text-[10px] flex-wrap justify-between items-center gap-3 shrink-0 border-t ${
           "bg-white dark:bg-[#101216] border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400"
         }`}
       >

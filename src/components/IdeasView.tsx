@@ -209,7 +209,7 @@ export default function IdeasView({ project, onUpdateProject }: IdeasViewProps) 
 
       {/* 2x2 Matrix */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-slate-50/50 dark:bg-[#0F1115]">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 h-full min-h-[600px]">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:h-full xl:min-h-[600px]">
           {ZONES.map(zone => {
             const zoneIdeas = filteredIdeas.filter(i => i.status === zone.id);
             const isDragOver = dragOverZone === zone.id;
@@ -221,7 +221,7 @@ export default function IdeasView({ project, onUpdateProject }: IdeasViewProps) 
                 onDragOver={(e) => handleDragOver(e, zone.id)}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, zone.id)}
-                className={`flex flex-col bg-white dark:bg-[#14171C] rounded-xl border ${isDragOver ? 'ring-2 ring-indigo-500 border-transparent' : zone.borderClass} transition-all overflow-hidden h-[45vh] xl:h-full`}
+                className={`flex flex-col bg-white dark:bg-[#14171C] rounded-xl border ${isDragOver ? 'ring-2 ring-indigo-500 border-transparent' : zone.borderClass} transition-all overflow-hidden max-h-[60vh] xl:max-h-none xl:h-full`}
               >
                 {/* Zone Header */}
                 <div className={`p-4 border-b ${zone.borderClass} ${zone.bgClass} flex items-center justify-between`}>
@@ -249,7 +249,7 @@ export default function IdeasView({ project, onUpdateProject }: IdeasViewProps) 
                       className={`bg-white dark:bg-[#1C1F26] border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group relative border-l-4 ${getLeftBorderColor(idea.status)}`}
                     >
                       {/* Floating Actions */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 absolute right-3 top-3">
+                      <div className="opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-1 absolute right-3 top-3">
                         <button onClick={() => openModal(idea)} className="p-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 rounded-md cursor-pointer transition-colors">
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -277,7 +277,7 @@ export default function IdeasView({ project, onUpdateProject }: IdeasViewProps) 
                     </div>
                   ))}
                   {zoneIdeas.length === 0 && (
-                    <div className="h-full min-h-[100px] flex items-center justify-center text-xs font-semibold text-slate-400 dark:text-slate-600 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-xl">
+                    <div className="h-full min-h-[64px] md:min-h-[100px] flex items-center justify-center text-xs font-semibold text-slate-400 dark:text-slate-600 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-xl">
                       Drop tasks here
                     </div>
                   )}

@@ -191,17 +191,17 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
                 <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-wide uppercase">
                   Resource Workload & Task Ownership
                 </h3>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                <span className="hidden sm:inline text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                   Active Member Allocation Sheet
                 </span>
               </div>
-              <div className="p-4 overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs min-w-[400px]">
+              <div className="p-2 sm:p-4 overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs sm:min-w-[400px]">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-[#1E222B] bg-slate-50 dark:bg-[#1C1F26]/20 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                       <th className="py-2.5 px-3">Assignee</th>
-                      <th className="py-2.5 px-3 text-center w-32">Task Count</th>
-                      <th className="py-2.5 px-3 text-center w-36">Workload %</th>
+                      <th className="py-2.5 px-3 text-center w-16 sm:w-32">Tasks</th>
+                      <th className="hidden sm:table-cell py-2.5 px-3 text-center w-36">Workload %</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/40">
@@ -224,10 +224,16 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
                                 )}
                               </div>
                               <span className="text-[10px] text-slate-500">{details.role}</span>
+                              <div className="sm:hidden mt-1 flex items-center gap-2">
+                                <div className="w-24 bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                                  <div className="bg-orange-500 h-full rounded-full" style={{ width: `${percentage}%` }}></div>
+                                </div>
+                                <span className="font-mono text-[10px] font-semibold text-slate-500 dark:text-slate-400">{percentage}%</span>
+                              </div>
                             </div>
                           </td>
                           <td className="py-3 px-3 text-center font-bold font-mono text-sm">{row.taskCount}</td>
-                          <td className="py-3 px-3">
+                          <td className="hidden sm:table-cell py-3 px-3">
                             <div className="flex items-center space-x-3">
                               <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                                 <div className="bg-orange-500 h-full rounded-full" style={{ width: `${percentage}%` }}></div>
@@ -245,9 +251,9 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
             
             <div className="bg-slate-50 dark:bg-[#1C1F26] p-4 border-t border-slate-200 dark:border-[#1E222B] flex items-center justify-between font-bold text-xs uppercase tracking-wider">
               <span>Grand Total</span>
-              <div className="flex items-center space-x-12 pr-4">
+              <div className="flex items-center gap-12 pr-2 sm:pr-4">
                 <span className="text-indigo-600 dark:text-indigo-400 font-mono text-sm">{grandTotalTasks}</span>
-                <span className="text-slate-500 font-mono text-sm w-8">100%</span>
+                <span className="hidden sm:inline text-slate-500 font-mono text-sm w-8">100%</span>
               </div>
             </div>
           </div>
@@ -283,7 +289,7 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
                         </div>
                         {team.description && <p className="text-[10px] text-slate-500 mt-1">{team.description}</p>}
                       </div>
-                      <button onClick={() => handleRemoveTeam(team.id)} className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleRemoveTeam(team.id)} className="text-slate-400 hover:text-rose-500 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -379,7 +385,7 @@ export default function TeamView({ project, onUpdateProject }: TeamViewProps) {
                       onClick={() => {
                         handleRemoveMember(member.assignee);
                       }}
-                      className="text-slate-400 hover:text-rose-500 transition-colors bg-white dark:bg-[#14171C] border border-slate-200 dark:border-slate-800 rounded p-1.5 shadow-sm opacity-0 group-hover:opacity-100"
+                      className="text-slate-400 hover:text-rose-500 transition-colors bg-white dark:bg-[#14171C] border border-slate-200 dark:border-slate-800 rounded p-1.5 shadow-sm opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100"
                       title="Remove member"
                     >
                       <Trash2 className="w-4 h-4" />

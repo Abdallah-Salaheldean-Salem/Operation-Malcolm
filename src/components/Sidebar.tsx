@@ -333,7 +333,7 @@ export default function Sidebar({
                     id={`space-menu-btn-${proj.id}`}
                     onClick={() => setMenuOpenId(isMenuOpen ? null : proj.id)}
                     className={`p-1 rounded hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer ${
-                      isMenuOpen ? "opacity-100 text-slate-900 dark:text-white" : "opacity-0 group-hover:opacity-100 text-slate-500 dark:text-slate-400"
+                      isMenuOpen ? "opacity-100 text-slate-900 dark:text-white" : "opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 text-slate-500 dark:text-slate-400"
                     }`}
                     title="Manage Space"
                   >
@@ -496,7 +496,7 @@ export default function Sidebar({
                       <span className="w-3.5 text-center flex-shrink-0 text-[13px] leading-none opacity-60">{proj.icon || "🗂️"}</span>
                       <span className="truncate italic">{proj.name}</span>
                     </div>
-                    <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition-opacity">
                       {onRestoreProject && (
                         <button
                           id={`restore-space-${proj.id}`}

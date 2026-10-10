@@ -1285,7 +1285,7 @@ export default function App() {
         </div>
 
         {/* 2. DYNAMIC WORKSPACE HEADER */}
-        <div id="workspace-dynamic-header" className="px-3 md:px-6 pt-4 md:pt-5 pb-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-[#161A22] select-none shrink-0">
+        <div id="workspace-dynamic-header" className="px-3 md:px-6 pt-3 md:pt-5 pb-3 md:pb-4 bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-[#161A22] select-none shrink-0">
 
           {/* Mobile project pills */}
           <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar -mx-3 px-3" style={{ scrollbarWidth: "none" }}>
@@ -1295,7 +1295,7 @@ export default function App() {
                 <button
                   key={proj.id}
                   onClick={() => handleSelectProject(proj.id)}
-                  className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+                  className={`shrink-0 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-bold transition-colors ${
                     isActive
                       ? "bg-indigo-600 text-white shadow-[0_2px_10px_rgba(79,70,229,0.35)]"
                       : "bg-slate-200/70 dark:bg-[#14171C] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#1E222B]"
@@ -1308,33 +1308,35 @@ export default function App() {
             })}
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="shrink-0 flex items-center gap-1 px-4 py-2 rounded-full text-sm font-bold text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-[#2E3541]"
+              className="shrink-0 flex items-center gap-1 px-3.5 py-1.5 rounded-full text-sm font-bold text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-[#2E3541]"
             >
               <Plus className="w-4 h-4" />
               <span>New</span>
             </button>
           </div>
 
-          {/* Mobile stat strip (compact take on the desktop metric cards) */}
-          <div className="md:hidden flex items-center gap-2 overflow-x-auto no-scrollbar mt-3 -mx-3 px-3" style={{ scrollbarWidth: "none" }}>
-            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
-              <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap">{totalTasksCount} Tasks</span>
-            </div>
-            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
-              <Clock className="w-3.5 h-3.5 text-blue-400" />
-              <span className="text-[11px] font-bold text-blue-400 whitespace-nowrap">{inProgressCount} Ongoing</span>
-            </div>
-            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-              <span className="text-[11px] font-bold text-rose-400 whitespace-nowrap">{blockedCount} Blocked</span>
-            </div>
-            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
-              <div className="w-10 bg-slate-200 dark:bg-[#0B0D11] rounded-full h-1.5 overflow-hidden">
-                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${completionPercentage}%` }} />
-              </div>
-              <span className="text-[11px] font-bold text-emerald-400 whitespace-nowrap">{completionPercentage}%</span>
-            </div>
+          {/* Mobile stat line (compact take on the desktop metric cards) */}
+          <div id="mobile-stat-line" className="md:hidden mt-2.5 flex items-center gap-3 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <LayoutGrid className="w-3 h-3 text-indigo-400" />
+              <b className="text-slate-800 dark:text-slate-200">{totalTasksCount}</b> tasks
+            </span>
+            <span className="flex items-center gap-1 whitespace-nowrap">
+              <Clock className="w-3 h-3 text-blue-400" />
+              <b className="text-blue-500 dark:text-blue-400">{inProgressCount}</b> ongoing
+            </span>
+            {blockedCount > 0 && (
+              <span className="flex items-center gap-1 whitespace-nowrap">
+                <AlertTriangle className="w-3 h-3 text-rose-400" />
+                <b className="text-rose-500 dark:text-rose-400">{blockedCount}</b> blocked
+              </span>
+            )}
+            <span className="ml-auto flex items-center gap-1.5 whitespace-nowrap">
+              <span className="w-12 bg-slate-200 dark:bg-[#1A1E26] rounded-full h-1.5 overflow-hidden">
+                <span className="block bg-emerald-500 h-1.5 rounded-full" style={{ width: `${completionPercentage}%` }} />
+              </span>
+              <b className="text-emerald-600 dark:text-emerald-400">{completionPercentage}%</b>
+            </span>
           </div>
 
           <div className="hidden md:flex md:items-center justify-between gap-4">

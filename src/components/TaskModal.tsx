@@ -390,7 +390,7 @@ export default function TaskModal({
                                   type="button"
                                   title="Delete template"
                                   onClick={() => onDeleteTemplate(tpl.id)}
-                                  className="p-1 text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition"
+                                  className="p-1 text-slate-400 hover:text-rose-500 opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 transition"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -462,7 +462,7 @@ export default function TaskModal({
                       id={`checklist-delete-${sub.id}`}
                       type="button"
                       onClick={() => handleDeleteChecklist(sub.id)}
-                      className="text-slate-500 dark:text-slate-400 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                      className="text-slate-500 dark:text-slate-400 hover:text-rose-600 transition-colors opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -527,7 +527,7 @@ export default function TaskModal({
                       id={`subtask-delete-${sub.id}`}
                       type="button"
                       onClick={() => handleDeleteSubtask(sub.id)}
-                      className="text-slate-500 dark:text-slate-400 hover:text-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                      className="text-slate-500 dark:text-slate-400 hover:text-rose-600 transition-colors opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
