@@ -5,6 +5,7 @@ import { fetchAppState, saveAppState } from "../lib/supabase-sync";
 import { checkDoneGate } from "../lib/checklist";
 import { isDeadlineMissed, CONSTRAINT_LABELS } from "../lib/scheduling";
 import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
+import { localToday } from "../lib/notifications";
 import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle, CheckSquare } from "lucide-react";
 
 interface ActivityViewProps {
@@ -187,7 +188,8 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
     }`;
 
   // Form states
-  const [targetDate, setTargetDate] = useState("2026-06-19");
+  // Opens on today (local date, not UTC).
+  const [targetDate, setTargetDate] = useState(() => localToday());
   const dateInputRef = useRef<HTMLInputElement>(null);
   const openDatePicker = () => {
     const el = dateInputRef.current as any;
@@ -314,8 +316,8 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
         description: additionalNotes || "Created from Daily Logs board",
         status: columnId,
         priority: "medium" as const,
-        dueDate: targetDate || new Date().toISOString().split("T")[0],
-        startDate: targetDate || new Date().toISOString().split("T")[0],
+        dueDate: targetDate || localToday(),
+        startDate: targetDate || localToday(),
         assignee: whoCompleted || "Unassigned",
         tags: [],
         estimatedHours: Number(loggedHours) || 4,
