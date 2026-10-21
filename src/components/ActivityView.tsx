@@ -284,7 +284,8 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
     setCompletedText(task.title);
     if (task.status) setLogStatus(task.status as DailyLog["status"]);
     if (task.assignee && teamList.includes(task.assignee)) setWhoCompleted(task.assignee);
-    if (task.actualHours) setLoggedHours(task.actualHours);
+    // Logged hours = time spent in this session; it is added to the task's
+    // total on submit, so don't prefill it with the task's existing hours.
     loggerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
