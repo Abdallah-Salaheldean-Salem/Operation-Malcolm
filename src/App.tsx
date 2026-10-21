@@ -1660,6 +1660,7 @@ export default function App() {
               project={activeProject}
               onUpdateProject={handleUpdateProject}
               checklistTemplates={checklistTemplates[activeProjectId] || []}
+              onOpenTask={(t) => handleOpenTaskModal(t)}
             />
           )}
 

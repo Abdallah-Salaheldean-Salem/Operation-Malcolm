@@ -12,6 +12,7 @@ interface ActivityViewProps {
   project: Project;
   onUpdateProject?: (updatedProj: Project) => void;
   checklistTemplates?: ChecklistTemplate[];
+  onOpenTask?: (task: Task) => void;
 }
 
 interface DailyLog {
@@ -62,7 +63,7 @@ const INITIAL_LOGS: DailyLog[] = [
   }
 ];
 
-export default function ActivityView({ project, onUpdateProject, checklistTemplates = [] }: ActivityViewProps) {
+export default function ActivityView({ project, onUpdateProject, checklistTemplates = [], onOpenTask }: ActivityViewProps) {
   // Persistence for daily logs
   const [logs, setLogs] = useState<DailyLog[]>(() => {
     const saved = localStorage.getItem("clickup_daily_logs");
@@ -270,6 +271,22 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
         ? { ...log, taskTitle: globalTask.title, status: globalTask.status }
         : log;
     });
+
+  // Tasks scheduled (due) on this date in the calendar that have no log yet.
+  const scheduledTasks = project.tasks.filter(
+    (t) => t.dueDate === targetDate && !displayLogs.some((log) => log.taskId === t.id)
+  );
+  const loggerRef = useRef<HTMLDivElement>(null);
+  // Prefill the Task Logger from a scheduled task.
+  const startLogFor = (task: Task) => {
+    setEditingLogId(null);
+    setLinkedTaskId(task.id);
+    setCompletedText(task.title);
+    if (task.status) setLogStatus(task.status as DailyLog["status"]);
+    if (task.assignee && teamList.includes(task.assignee)) setWhoCompleted(task.assignee);
+    if (task.actualHours) setLoggedHours(task.actualHours);
+    loggerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Compute total logged hours for this date range
   const totalLoggedHours = displayLogs.reduce((sum, log) => sum + (Number(log.hours) || 0), 0);
@@ -519,6 +536,7 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
           </div>
         </div>
 
+        <div ref={loggerRef} className="scroll-mt-4" />
         <form onSubmit={handleLogSubmit} className="space-y-4 text-xs">
           
           {/* Target Schedule Date */}
@@ -878,7 +896,12 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
               Sprint Logs for {targetDate}
             </span>
             <h4 className="text-sm font-bold text-slate-800 dark:text-white mt-1">
-              {displayLogs.length} {displayLogs.length === 1 ? "report" : "reports"} assigned to this target date range.
+              {displayLogs.length} {displayLogs.length === 1 ? "report" : "reports"} logged
+              {scheduledTasks.length > 0 && (
+                <span className="text-slate-500 dark:text-slate-400 font-semibold">
+                  {" "}· {scheduledTasks.length} scheduled task{scheduledTasks.length === 1 ? "" : "s"} not logged yet
+                </span>
+              )}
             </h4>
           </div>
           <div className="text-right shrink-0">
@@ -893,7 +916,7 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
 
         {/* List of filtered logs */}
         <div className="flex-1 space-y-3 overflow-y-auto pr-1">
-          {displayLogs.length === 0 ? (
+          {displayLogs.length === 0 && scheduledTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Calendar className="w-12 h-12 text-slate-350 dark:text-slate-700 stroke-[1.5] mb-3" />
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">No activity records logged for {targetDate}.</p>
@@ -1020,6 +1043,69 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
               </div>
               );
             })
+          )}
+
+          {scheduledTasks.length > 0 && (
+            <div id="daily-logs-scheduled" className={displayLogs.length > 0 ? "pt-3" : ""}>
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                  Scheduled for this day · from the calendar
+                </span>
+              </div>
+              <div className="space-y-2">
+                {scheduledTasks.map((task) => {
+                  const col = project.columns.find((c) => c.id === task.status);
+                  const done = /\b(done|complete|completed|shipped|closed)\b/i.test(col?.title || "");
+                  return (
+                    <div
+                      key={task.id}
+                      data-testid="scheduled-task"
+                      className="border border-dashed border-slate-300 dark:border-[#2A303B] rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      style={{ borderLeft: `4px solid ${col?.color || "#64748b"}` }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onOpenTask?.(task)}
+                        className="text-left flex-1 min-w-0 space-y-1"
+                        title="Open task"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          {col && (
+                            <span
+                              className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider text-white"
+                              style={{ backgroundColor: col.color }}
+                            >
+                              {col.title}
+                            </span>
+                          )}
+                          {isDeadlineMissed(task) && (
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-rose-500/10 text-rose-500 border border-rose-500/20 flex items-center gap-1">
+                              <AlertTriangle className="w-2.5 h-2.5" /> Late
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                            <User className="w-3 h-3" />
+                            {task.assignee || "Unassigned"}
+                          </span>
+                        </div>
+                        <h5 className={`text-xs font-bold leading-snug ${done ? "line-through text-slate-500" : "text-slate-800 dark:text-slate-100"}`}>
+                          {task.title}
+                        </h5>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="scheduled-task-log"
+                        onClick={() => startLogFor(task)}
+                        className="shrink-0 self-start sm:self-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Log it
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>
