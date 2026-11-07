@@ -14,6 +14,7 @@ export interface SubTask {
   id: string;
   title: string;
   completed: boolean;
+  completedAt?: string; // YYYY-MM-DD the item was ticked done (editable)
 }
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly";

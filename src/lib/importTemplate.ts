@@ -195,8 +195,8 @@ export function buildImportGuide(project: Project, appName: string): string {
     ["moduleId", "string", "no", "Groups the task under a module (phase/subsystem)"],
     ["isMilestone", "boolean", "no", "`true` for a milestone diamond on the Gantt (give it the same start and due date)"],
     ["dependencies", "string[]", "no", "Ids of tasks that must be finished first"],
-    ["checklist", "array", "no", "Definition-of-done items: `[{ \"title\": \"…\", \"completed\": false }]`"],
-    ["subtasks", "array", "no", "Work steps: `[{ \"title\": \"…\", \"completed\": false }]`"],
+    ["checklist", "array", "no", "Definition-of-done items: `[{ \"title\": \"…\", \"completed\": false }]`; a ticked item may add `\"completedAt\": \"YYYY-MM-DD\"`"],
+    ["subtasks", "array", "no", "Work steps: `[{ \"title\": \"…\", \"completed\": false }]`; a ticked item may add `\"completedAt\": \"YYYY-MM-DD\"`"],
     ["constraintType", "string", "no", "`start-no-earlier-than` · `start-no-later-than` · `must-start-on` · `finish-no-later-than` · `must-finish-on`"],
     ["constraintDate", "YYYY-MM-DD", "no", "Date used by constraintType"],
     ["recurrence", "object", "no", "`{ \"frequency\": \"daily\" | \"weekly\" | \"monthly\", \"interval\": 1 }` — completing the task creates the next one"],
@@ -225,7 +225,7 @@ export function buildImportGuide(project: Project, appName: string): string {
   L.push("");
   L.push("- **Weekly or phased plans:** one task per week (or per deliverable), with that week's to-dos in `checklist`, and one module per phase.");
   L.push("- **Milestones:** a separate task with `\"isMilestone\": true`, the same start and due date, and `dependencies` pointing at the task that finishes it.");
-  L.push("- **Items already done:** set `\"completed\": true` on the checklist item; put a task that is underway in the in-progress column.");
+  L.push("- **Items already done:** set `\"completed\": true` on the checklist item (and `\"completedAt\": \"YYYY-MM-DD\"` if you know when); put a task that is underway in the in-progress column.");
   L.push("- **Big plans** (hundreds of items) are fine in a single file.");
   L.push("");
 

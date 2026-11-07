@@ -167,6 +167,25 @@ export default function ListView({
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Tasks");
+      // Second sheet: every checklist item / subtask with the date it was done.
+      const itemRows = filteredTasks.flatMap((t) =>
+        ([["Checklist", t.checklist], ["Subtask", t.subtasks]] as const).flatMap(([kind, items]) =>
+          (items || []).map((it) => ({
+            Task: t.title,
+            Status: colTitle(t.status),
+            Assignee: t.assignee || "Unassigned",
+            List: kind,
+            Item: it.title,
+            Done: it.completed ? "Yes" : "No",
+            "Done Date": it.completed ? it.completedAt || "" : "",
+          }))
+        )
+      );
+      if (itemRows.length > 0) {
+        const itemsWs = XLSX.utils.json_to_sheet(itemRows);
+        itemsWs["!cols"] = [{ wch: 40 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 50 }, { wch: 6 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, itemsWs, "Checklist");
+      }
       XLSX.writeFile(wb, `${safeName}_${today}.xlsx`);
     } catch (err) {
       console.error("Excel export failed", err);

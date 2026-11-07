@@ -4,7 +4,7 @@ import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, Constraint
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
 import { CONSTRAINT_LABELS, isDeadlineMissed, constraintWarning } from "../lib/scheduling";
-import { isWatching, setWatching, watcherNames } from "../lib/notifications";
+import { isWatching, setWatching, watcherNames, localToday } from "../lib/notifications";
 import {
   X,
   Calendar,
@@ -207,10 +207,21 @@ export default function TaskModal({
     setNewSubtaskTitle("");
   };
 
+  // Ticking an item stamps today's date (editable); unticking clears it.
+  const toggleItem = (it: SubTask): SubTask => {
+    if (it.completed) {
+      const { completedAt: _drop, ...rest } = it;
+      return { ...rest, completed: false };
+    }
+    return { ...it, completed: true, completedAt: it.completedAt || localToday() };
+  };
+
   const handleToggleSubtask = (id: string) => {
-    setSubtasks(
-      subtasks.map((sub) => (sub.id === id ? { ...sub, completed: !sub.completed } : sub))
-    );
+    setSubtasks(subtasks.map((sub) => (sub.id === id ? toggleItem(sub) : sub)));
+  };
+
+  const handleSubtaskDate = (id: string, date: string) => {
+    setSubtasks(subtasks.map((sub) => (sub.id === id ? { ...sub, completedAt: date || localToday() } : sub)));
   };
 
   const handleDeleteSubtask = (id: string) => {
@@ -225,7 +236,11 @@ export default function TaskModal({
   };
 
   const handleToggleChecklist = (id: string) => {
-    setChecklist(checklist.map((it) => (it.id === id ? { ...it, completed: !it.completed } : it)));
+    setChecklist(checklist.map((it) => (it.id === id ? toggleItem(it) : it)));
+  };
+
+  const handleChecklistDate = (id: string, date: string) => {
+    setChecklist(checklist.map((it) => (it.id === id ? { ...it, completedAt: date || localToday() } : it)));
   };
 
   const handleDeleteChecklist = (id: string) => {
@@ -446,7 +461,7 @@ export default function TaskModal({
                     id={`checklist-row-${sub.id}`}
                     className="flex items-center justify-between bg-slate-50 dark:bg-[#0F1115] px-3 py-1.5 rounded-lg border border-slate-100 dark:border-[#161A22] text-sm group"
                   >
-                    <label className="flex items-center space-x-2.5 cursor-pointer flex-1">
+                    <label className="flex items-center space-x-2.5 cursor-pointer flex-1 min-w-0">
                       <input
                         id={`checklist-check-${sub.id}`}
                         type="checkbox"
@@ -458,6 +473,18 @@ export default function TaskModal({
                         {sub.title}
                       </span>
                     </label>
+                    {sub.completed && (
+                      <input
+                        id={`checklist-date-${sub.id}`}
+                        type="date"
+                        title="Date this item was done"
+                        aria-label="Date done"
+                        value={sub.completedAt || ""}
+                        onChange={(e) => handleChecklistDate(sub.id, e.target.value)}
+                        onClick={(e) => { try { (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* ignore */ } }}
+                        className="done-date shrink-0 ml-2 w-[7.5rem] bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-400 rounded-md px-1.5 py-0.5 text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    )}
                     <button
                       id={`checklist-delete-${sub.id}`}
                       type="button"
@@ -511,7 +538,7 @@ export default function TaskModal({
                     id={`subtask-row-${sub.id}`}
                     className="flex items-center justify-between bg-slate-50 dark:bg-[#0F1115] px-3 py-1.5 rounded-lg border border-slate-100 dark:border-[#161A22] text-sm group"
                   >
-                    <label className="flex items-center space-x-2.5 cursor-pointer flex-1">
+                    <label className="flex items-center space-x-2.5 cursor-pointer flex-1 min-w-0">
                       <input
                         id={`subtask-check-${sub.id}`}
                         type="checkbox"
@@ -523,6 +550,18 @@ export default function TaskModal({
                         {sub.title}
                       </span>
                     </label>
+                    {sub.completed && (
+                      <input
+                        id={`subtask-date-${sub.id}`}
+                        type="date"
+                        title="Date this subtask was done"
+                        aria-label="Date done"
+                        value={sub.completedAt || ""}
+                        onChange={(e) => handleSubtaskDate(sub.id, e.target.value)}
+                        onClick={(e) => { try { (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* ignore */ } }}
+                        className="done-date shrink-0 ml-2 w-[7.5rem] bg-emerald-500/10 border border-emerald-500/25 text-emerald-700 dark:text-emerald-400 rounded-md px-1.5 py-0.5 text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    )}
                     <button
                       id={`subtask-delete-${sub.id}`}
                       type="button"

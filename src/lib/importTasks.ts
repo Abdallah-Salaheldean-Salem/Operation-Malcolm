@@ -30,6 +30,9 @@ function normalizeItems(raw: unknown, prefix: string): SubTask[] {
       id: typeof it.id === "string" && it.id ? it.id : `${prefix}-${i + 1}`,
       title: it.title.trim(),
       completed: it.completed === true,
+      ...(it.completed === true && typeof it.completedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(it.completedAt)
+        ? { completedAt: it.completedAt }
+        : {}),
     }));
 }
 
