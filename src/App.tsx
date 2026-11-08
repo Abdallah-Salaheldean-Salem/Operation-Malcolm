@@ -19,6 +19,9 @@ import NotificationBell, { PopupPermission } from "./components/NotificationBell
 import { loadMe, saveMe, sameName, nameKey } from "./lib/identity";
 import { diffTaskEvents } from "./lib/notificationEvents";
 import { PushState, getPushState, enablePush, disablePush, sendTestPush, resyncPush } from "./lib/push";
+import { myRunningTimers, startTimerFor, stopTimersFor, formatHours } from "./lib/timer";
+import { appendDailyLog } from "./lib/dailyLogs";
+import TimerButton from "./components/TimerButton";
 import {
   RemoteNotification,
   fetchNotifications,
@@ -901,6 +904,52 @@ export default function App() {
     if (proj.id !== activeProjectId) doSelectProject(proj.id);
     if (task) handleOpenTaskModal(task);
   };
+  // --- Task timers (start/stop; stopping logs the time) ---
+  const runningTimers = useMemo(() => myRunningTimers(projects, myKey), [projects, myKey]);
+  const [timerToast, setTimerToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!timerToast) return;
+    const id = window.setTimeout(() => setTimerToast(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [timerToast]);
+  const applyTimerResult = (res: ReturnType<typeof stopTimersFor>) => {
+    setProjects(res.projects);
+    res.logs.forEach(appendDailyLog);
+    if (res.stopped.length) {
+      setTimerToast(
+        res.stopped
+          .map((st) => (st.hours > 0 ? `Logged ${formatHours(st.hours)} to “${st.title}”` : `Timer stopped — under a minute, not logged`))
+          .join(" · ")
+      );
+    }
+  };
+  // Start/stop my timer on a task. Returns the hours added to that task when stopping.
+  const toggleTimer = (projectId: string, taskId: string): number => {
+    if (!me || !myKey) {
+      requestIdentity();
+      return 0;
+    }
+    const task = projects.find((p) => p.id === projectId)?.tasks.find((t) => t.id === taskId);
+    if (!task) return 0;
+    const now = Date.now();
+    const running = !!task.timers?.[myKey];
+    const res = running
+      ? stopTimersFor(projects, myKey, me, now)
+      : startTimerFor(projects, projectId, taskId, myKey, me, now);
+    applyTimerResult(res);
+    return res.stopped.find((st) => st.taskId === taskId)?.hours || 0;
+  };
+  const stopMyTimers = () => {
+    if (!me || !myKey) return;
+    applyTimerResult(stopTimersFor(projects, myKey, me, Date.now()));
+  };
+  const openTimerTask = (projectId: string, taskId: string) => {
+    const task = projects.find((p) => p.id === projectId)?.tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    if (projectId !== activeProjectId) doSelectProject(projectId);
+    handleOpenTaskModal(task);
+  };
+
   const bellProps = {
     alerts,
     readKeys: effectiveRead,
@@ -919,7 +968,8 @@ export default function App() {
   };
 
   // Save Task (Create or Update)
-  const handleSaveTask = (taskData: Partial<Task> & { id?: string }) => {
+  const handleSaveTask = (input: Partial<Task> & { id?: string; actualHoursBase?: number }) => {
+    const { actualHoursBase, ...taskData } = input;
     if (!taskData.title?.trim()) return;
 
     let updatedTasks: Task[] = [];
@@ -929,10 +979,16 @@ export default function App() {
       const oldTask = activeProject.tasks.find((t) => t.id === taskData.id);
       updatedTasks = activeProject.tasks.map((t) => {
         if (t.id === taskData.id) {
-          return {
-            ...t,
-            ...taskData,
-          } as Task;
+          const merged = { ...t, ...taskData } as Task;
+          // A timer may have added hours while the window was open: keep them
+          // and apply only the change the user made in the window.
+          if (typeof actualHoursBase === "number" && typeof taskData.actualHours === "number") {
+            merged.actualHours = Math.max(
+              0,
+              Math.round(((t.actualHours || 0) + taskData.actualHours - actualHoursBase) * 100) / 100
+            );
+          }
+          return merged;
         }
         return t;
       });
@@ -1661,6 +1717,10 @@ export default function App() {
               onUpdateProject={handleUpdateProject}
               checklistTemplates={checklistTemplates[activeProjectId] || []}
               onOpenTask={(t) => handleOpenTaskModal(t)}
+              myTimers={Object.fromEntries(
+                runningTimers.filter((r) => r.projectId === activeProject.id).map((r) => [r.task.id, r.startedAt])
+              )}
+              onToggleTimer={(taskId) => toggleTimer(activeProject.id, taskId)}
             />
           )}
 
@@ -1700,6 +1760,38 @@ export default function App() {
         </div>
 
         {/* Toast Notification helper */}
+        {/* Running timer bar (my timers, any space) */}
+        {runningTimers.length > 0 && (
+          <div
+            id="running-timer-bar"
+            className="fixed z-40 left-3 right-3 bottom-[76px] md:left-auto md:right-6 md:bottom-6 md:w-[26rem] bg-white/95 dark:bg-[#17191E]/95 backdrop-blur border border-rose-500/30 rounded-xl shadow-2xl px-3 py-2 flex items-center gap-3"
+          >
+            <span className="relative flex w-2.5 h-2.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-60 animate-ping" />
+              <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-rose-500" />
+            </span>
+            <button
+              type="button"
+              onClick={() => openTimerTask(runningTimers[0].projectId, runningTimers[0].task.id)}
+              className="min-w-0 flex-1 text-left"
+              title="Open task"
+            >
+              <span className="block text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{runningTimers[0].task.title}</span>
+              <span className="block text-[10px] text-slate-500 dark:text-slate-400 truncate">{runningTimers[0].projectName}</span>
+            </button>
+            <TimerButton startedAt={runningTimers[0].startedAt} size="sm" onToggle={stopMyTimers} />
+          </div>
+        )}
+        {timerToast && (
+          <div
+            id="timer-toast"
+            className="fixed z-50 left-3 right-3 bottom-[140px] md:left-auto md:right-6 md:bottom-24 md:w-[26rem] bg-emerald-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2"
+          >
+            <Check className="w-4 h-4 shrink-0 stroke-[3]" />
+            <span className="min-w-0">{timerToast}</span>
+          </div>
+        )}
+
         {showToast && (
           <div className="absolute bottom-20 md:bottom-6 right-4 md:right-6 bg-slate-200 dark:bg-[#1C2027] border border-indigo-500/20 text-indigo-400 text-xs px-4 py-2 rounded-xl shadow-xl z-50 flex items-center space-x-2 animate-bounce">
             <Check className="w-4 h-4 text-indigo-400 stroke-[3]" />
@@ -1780,6 +1872,8 @@ export default function App() {
           onDelete={handleDeleteTask}
           currentUser={me}
           onRequestIdentity={requestIdentity}
+          timerStartedAt={selectedTask && myKey ? activeProject.tasks.find((t) => t.id === selectedTask.id)?.timers?.[myKey] || null : null}
+          onToggleTimer={selectedTask ? () => toggleTimer(activeProject.id, selectedTask.id) : undefined}
         />
       )}
 

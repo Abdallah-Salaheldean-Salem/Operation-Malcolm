@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import DateInput from "./DateInput";
+import TimerButton from "./TimerButton";
 import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
@@ -35,10 +36,14 @@ interface TaskModalProps {
   onSaveTemplate?: (name: string, items: string[]) => void;
   onDeleteTemplate?: (id: string) => void;
   onClose: () => void;
-  onSave: (task: Partial<Task> & { id?: string }) => void;
+  // actualHoursBase = logged hours when the window opened, so the app applies
+  // only the user's own change (a timer may have added time meanwhile).
+  onSave: (task: Partial<Task> & { id?: string; actualHoursBase?: number }) => void;
   onDelete?: (id: string) => void;
   currentUser?: string | null; // who "me" is on this device (for "Notify me")
   onRequestIdentity?: () => void; // ask the user who they are
+  timerStartedAt?: string | null; // my running timer on this task, if any
+  onToggleTimer?: () => number | void; // start/stop; returns hours added on stop
 }
 
 export default function TaskModal({
@@ -57,7 +62,10 @@ export default function TaskModal({
   onDelete,
   currentUser = null,
   onRequestIdentity,
+  timerStartedAt = null,
+  onToggleTimer,
 }: TaskModalProps) {
+  const baseHoursRef = useRef(0);
   const isEditing = !!task;
 
   // Form states
@@ -110,6 +118,7 @@ export default function TaskModal({
       setDueDate(task.dueDate || "");
       setEstimatedHours(task.estimatedHours || 0);
       setActualHours(task.actualHours || 0);
+      baseHoursRef.current = task.actualHours || 0;
       setSelectedTags(task.tags || []);
       setSubtasks(task.subtasks || []);
       setChecklist(task.checklist || []);
@@ -174,6 +183,7 @@ export default function TaskModal({
       dueDate,
       estimatedHours: Number(estimatedHours),
       actualHours: Number(actualHours),
+      ...(task ? { actualHoursBase: baseHoursRef.current } : {}),
       tags: selectedTags,
       subtasks,
       checklist,
@@ -917,6 +927,24 @@ export default function TaskModal({
                 />
               </div>
             </div>
+            {task && onToggleTimer && (
+              <div id="task-timer-row" className="flex items-center justify-between gap-2 -mt-1">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
+                  {timerStartedAt ? "Timing… stopping adds the time here and to Daily Logs." : "Time your work on this task."}
+                </span>
+                <TimerButton
+                  startedAt={timerStartedAt}
+                  size="sm"
+                  onToggle={() => {
+                    const added = onToggleTimer();
+                    if (typeof added === "number" && added > 0) {
+                      setActualHours((h) => Math.round((Number(h) + added) * 100) / 100);
+                      baseHoursRef.current = Math.round((baseHoursRef.current + added) * 100) / 100;
+                    }
+                  }}
+                />
+              </div>
+            )}
 
             {/* Gantt & ClickUp advanced properties */}
             <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-[#0F1115] p-2.5 rounded-lg border border-slate-100 dark:border-[#161A22]">

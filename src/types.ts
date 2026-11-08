@@ -68,6 +68,7 @@ export interface Task {
   recurrence?: Recurrence; // if set, completing the task spawns the next occurrence
   watchers?: string[];     // member names who ticked "Notify me" on this task
   muted?: string[];        // assignees who unticked the automatic "Notify me"
+  timers?: Record<string, string>; // running timers: member name key → ISO start time
 }
 
 // Hardware/engineering readiness lifecycle for a module (subsystem)

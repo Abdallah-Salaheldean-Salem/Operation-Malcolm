@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import DateInput from "./DateInput";
+import TimerButton from "./TimerButton";
 import { Project, Task, SubTask, ConstraintType, RecurrenceFrequency, ChecklistTemplate } from "../types";
 import { fetchAppState, saveAppState } from "../lib/supabase-sync";
 import { checkDoneGate } from "../lib/checklist";
 import { isDeadlineMissed, CONSTRAINT_LABELS } from "../lib/scheduling";
 import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
 import { localToday } from "../lib/notifications";
+import { DailyLog, LOGS_STORAGE_KEY, LOGS_APPEND_EVENT } from "../lib/dailyLogs";
 import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle, CheckSquare } from "lucide-react";
 
 interface ActivityViewProps {
@@ -13,19 +15,10 @@ interface ActivityViewProps {
   onUpdateProject?: (updatedProj: Project) => void;
   checklistTemplates?: ChecklistTemplate[];
   onOpenTask?: (task: Task) => void;
+  myTimers?: Record<string, string>; // taskId → start time of my running timer
+  onToggleTimer?: (taskId: string) => void;
 }
 
-interface DailyLog {
-  id: string;
-  date: string;
-  taskId: string;
-  taskTitle: string;
-  description: string;
-  status: string;
-  time: string;
-  assignee: string;
-  hours: number;
-}
 
 const INITIAL_LOGS: DailyLog[] = [
   {
@@ -63,15 +56,15 @@ const INITIAL_LOGS: DailyLog[] = [
   }
 ];
 
-export default function ActivityView({ project, onUpdateProject, checklistTemplates = [], onOpenTask }: ActivityViewProps) {
+export default function ActivityView({ project, onUpdateProject, checklistTemplates = [], onOpenTask, myTimers = {}, onToggleTimer }: ActivityViewProps) {
   // Persistence for daily logs
   const [logs, setLogs] = useState<DailyLog[]>(() => {
-    const saved = localStorage.getItem("clickup_daily_logs");
+    const saved = localStorage.getItem(LOGS_STORAGE_KEY);
     return saved ? JSON.parse(saved) : INITIAL_LOGS;
   });
 
   useEffect(() => {
-    localStorage.setItem("clickup_daily_logs", JSON.stringify(logs));
+    localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(logs));
   }, [logs]);
 
   // Shared logs sync: adopt the remote feed on mount (seeding it on the very
@@ -101,6 +94,18 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
       cancelled = true;
     };
   }, []);
+
+  // Logs added from outside this view (e.g. a stopped timer).
+  useEffect(() => {
+    if (!logsSyncReady) return;
+    const onAppend = (e: Event) => {
+      const log = (e as CustomEvent<DailyLog>).detail;
+      e.preventDefault(); // tell appendDailyLog we've got it
+      setLogs((prev) => (prev.some((l) => l.id === log.id) ? prev : [log, ...prev]));
+    };
+    window.addEventListener(LOGS_APPEND_EVENT, onAppend);
+    return () => window.removeEventListener(LOGS_APPEND_EVENT, onAppend);
+  }, [logsSyncReady]);
 
   useEffect(() => {
     if (!logsSyncReady) return;
@@ -359,18 +364,30 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
     }
 
     if (!isNewTask && onUpdateProject) {
+      // Editing a log only adds the change in hours (the old entry was already
+      // counted); if the edit moved the log to another task, take its hours back.
+      const prevLog = editingLogId ? logs.find((l) => l.id === editingLogId) : undefined;
+      const prevHours = Number(prevLog?.hours) || 0;
+      const sameTask = !!prevLog && prevLog.taskId === finalTaskId;
+      const addHours = (Number(loggedHours) || 0) - (sameTask ? prevHours : 0);
       const updatedTasks = project.tasks.map(t => {
         if (t.id === finalTaskId) {
+          const day = targetDate || localToday();
           return {
             ...t,
             title: finalTaskTitle,
             description: additionalNotes || t.description,
             status: logStatus,
-            dueDate: targetDate || t.dueDate,
-            startDate: targetDate || t.startDate,
+            // Keep the plan: only fill missing dates, and pull the start back
+            // if work was logged before it.
+            startDate: !t.startDate || day < t.startDate ? day : t.startDate,
+            dueDate: t.dueDate || day,
             assignee: whoCompleted || t.assignee,
-            actualHours: (t.actualHours || 0) + (Number(loggedHours) || 0)
+            actualHours: Math.max(0, (t.actualHours || 0) + addHours)
           };
+        }
+        if (prevLog && !sameTask && t.id === prevLog.taskId) {
+          return { ...t, actualHours: Math.max(0, (t.actualHours || 0) - prevHours) };
         }
         return t;
       });
@@ -438,6 +455,7 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
   // Quick edit loader
   const handleEditInit = (log: DailyLog) => {
     setEditingLogId(log.id);
+    setLinkedTaskId(project.tasks.some((t) => t.id === log.taskId) ? log.taskId : "");
     setTargetDate(log.date);
     setCompletedText(log.taskTitle);
     setLogStatus(log.status);
@@ -448,12 +466,17 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
   };
 
   // Delete log handler
+  // Deleting a log removes only the log entry (never the task) and takes its
+  // hours back off the linked task.
   const handleDeleteLog = (id: string) => {
     const logToDelete = logs.find(l => l.id === id);
-    if (logToDelete && onUpdateProject) {
+    const hrs = Number(logToDelete?.hours) || 0;
+    if (logToDelete && hrs > 0 && onUpdateProject && project.tasks.some(t => t.id === logToDelete.taskId)) {
       onUpdateProject({
         ...project,
-        tasks: project.tasks.filter(t => t.id !== logToDelete.taskId)
+        tasks: project.tasks.map(t =>
+          t.id === logToDelete.taskId ? { ...t, actualHours: Math.max(0, (t.actualHours || 0) - hrs) } : t
+        )
       });
     }
     
@@ -465,6 +488,16 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
 
   // Adjust hours widget (- / + buttons)
   const adjustHours = (id: string, amount: number) => {
+    const log = logs.find((l) => l.id === id);
+    const delta = log ? Math.max(0, (log.hours || 0) + amount) - (log.hours || 0) : 0;
+    if (log && delta !== 0 && onUpdateProject && project.tasks.some((t) => t.id === log.taskId)) {
+      onUpdateProject({
+        ...project,
+        tasks: project.tasks.map((t) =>
+          t.id === log.taskId ? { ...t, actualHours: Math.max(0, (t.actualHours || 0) + delta) } : t
+        ),
+      });
+    }
     setLogs(
       logs.map((log) => {
         if (log.id === id) {
@@ -1094,14 +1127,19 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
                           {task.title}
                         </h5>
                       </button>
-                      <button
-                        type="button"
-                        data-testid="scheduled-task-log"
-                        onClick={() => startLogFor(task)}
-                        className="shrink-0 self-start sm:self-center flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Log it
-                      </button>
+                      <div className="shrink-0 self-start sm:self-center flex items-center gap-2">
+                        {onToggleTimer && (
+                          <TimerButton size="sm" startedAt={myTimers[task.id] || null} onToggle={() => onToggleTimer(task.id)} />
+                        )}
+                        <button
+                          type="button"
+                          data-testid="scheduled-task-log"
+                          onClick={() => startLogFor(task)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Log it
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
