@@ -3,6 +3,11 @@ import { createPortal } from "react-dom";
 import {
   AlertOctagon,
   AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardCopy,
+  FileSpreadsheet,
+  Share2,
   CalendarClock,
   CheckCircle2,
   CircleDashed,
@@ -47,6 +52,9 @@ import {
   weeklyOutput,
   weeksForPeriod,
 } from "../lib/dashboard";
+import { DailyLog, LOGS_STORAGE_KEY, LOGS_APPEND_EVENT } from "../lib/dailyLogs";
+import { fetchAppState } from "../lib/supabase-sync";
+import { weekBounds, weekLabel, weeklyReport, weeklyText } from "../lib/weekly";
 import { ChartCard, LoadHeatmap, MeterList, ProgressChart, SegmentedBar, StatTile, TableData, WeekColumns } from "./dashboard/charts";
 
 interface DashboardViewProps {
@@ -57,7 +65,7 @@ interface DashboardViewProps {
   onOpenTask: (projectId: string, task: Task) => void;
 }
 
-type Mode = "report" | "plan";
+type Mode = "report" | "plan" | "weekly";
 type Scope = "space" | "all";
 type QueueTab = "overdue" | "week" | "blocked" | "unassigned" | "progress";
 
@@ -101,7 +109,7 @@ const SELECT =
   "bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 max-w-[11rem]";
 
 export default function DashboardView({ projects, activeProject, me, onUpdateProject, onOpenTask }: DashboardViewProps) {
-  const [mode, setMode] = usePersisted<Mode>("dash_mode", "report", ["report", "plan"]);
+  const [mode, setMode] = usePersisted<Mode>("dash_mode", "report", ["report", "plan", "weekly"]);
   const [period, setPeriod] = usePersisted<PeriodKey>("dash_period", "30d", ["7d", "30d", "90d", "all"]);
   const [scope, setScope] = usePersisted<Scope>("dash_scope", "space", ["space", "all"]);
   const [person, setPerson] = useState<string>("");
@@ -114,6 +122,53 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
 
   // "Today" follows the clock (the tab may stay open overnight).
   const [today, setToday] = useState(() => localToday());
+
+  // ---- weekly report state ----------------------------------------------------------
+  // The week shown: on Sundays (start of the week) the week just ended, otherwise this week.
+  const defaultWeek = () => {
+    const t = localToday();
+    return new Date(t + "T00:00:00Z").getUTCDay() === 0 ? addDays(t, -7) : t;
+  };
+  const [weekAnchor, setWeekAnchor] = useState<string>(defaultWeek);
+  // Deep link from the weekly push: /?view=dashboard&dash=weekly
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("dash") === "weekly") {
+      setMode("weekly");
+      if (q.get("week") === "last") setWeekAnchor(addDays(localToday(), -7));
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [logs, setLogs] = useState<DailyLog[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(LOGS_STORAGE_KEY) || "[]");
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    let alive = true;
+    fetchAppState("daily_logs").then((res) => {
+      if (alive && res.ok && Array.isArray(res.value)) setLogs(res.value as DailyLog[]);
+    });
+    const onAppend = (e: Event) => {
+      const log = (e as CustomEvent<DailyLog>).detail;
+      setLogs((prev) => (prev.some((l) => l.id === log.id) ? prev : [log, ...prev]));
+    };
+    window.addEventListener(LOGS_APPEND_EVENT, onAppend);
+    return () => {
+      alive = false;
+      window.removeEventListener(LOGS_APPEND_EVENT, onAppend);
+    };
+  }, []);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [toast]);
   useEffect(() => {
     const tick = () => setToday(localToday());
     const id = window.setInterval(tick, 10 * 60 * 1000);
@@ -151,6 +206,122 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
   const load = useMemo(() => loadMatrix(rows, today, 6), [rows, today]);
   const accuracy = useMemo(() => estimateAccuracy(rows), [rows]);
   const spaces = useMemo(() => (effScope === "all" ? portfolio(scoped, today, person || null) : []), [effScope, scoped, today, person]);
+
+  const W = useMemo(() => weeklyReport(scoped, logs, weekAnchor, today, person || null), [scoped, logs, weekAnchor, today, person]);
+  const notesKey = `weekly_notes:${effScope === "all" ? "all" : activeProject.id}:${person || "everyone"}:${W.start}`;
+  const [notes, setNotesState] = useState("");
+  useEffect(() => {
+    try {
+      setNotesState(localStorage.getItem(notesKey) || "");
+    } catch {
+      setNotesState("");
+    }
+  }, [notesKey]);
+  const setNotes = (v: string) => {
+    setNotesState(v);
+    try {
+      if (v.trim()) localStorage.setItem(notesKey, v);
+      else localStorage.removeItem(notesKey);
+    } catch {
+      /* ignore */
+    }
+  };
+  const reportTitle = `${scopeName}${person ? ` — ${person}` : ""}`;
+  const summaryText = () => weeklyText(W, reportTitle, notes, effScope === "all");
+  const copySummary = async () => {
+    const text = summaryText();
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast("Summary copied — paste it into an email or chat.");
+    } catch {
+      // Clipboard blocked (e.g. not https): fall back to a hidden textarea.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      setToast(ok ? "Summary copied — paste it into an email or chat." : "Couldn't copy on this device.");
+    }
+  };
+  const canShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+  const shareSummary = async () => {
+    try {
+      await navigator.share({ title: `Weekly report — ${reportTitle}`, text: summaryText() });
+    } catch {
+      /* cancelled */
+    }
+  };
+  const [exportingXlsx, setExportingXlsx] = useState(false);
+  const exportWeekXlsx = async () => {
+    if (exportingXlsx) return;
+    setExportingXlsx(true);
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+      const sheet = (name: string, rows: Record<string, string | number>[], widths: number[]) => {
+        const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ "": "Nothing this week" }]);
+        ws["!cols"] = widths.map((wch) => ({ wch }));
+        XLSX.utils.book_append_sheet(wb, ws, name);
+      };
+      const space = (r: Row) => (effScope === "all" ? { Space: r.project.name } : {});
+      sheet(
+        "Summary",
+        [
+          { Item: "Report", Value: reportTitle },
+          { Item: "Week", Value: `${W.start} to ${W.end}${W.current ? " (so far)" : ""}` },
+          { Item: "Status today", Value: `${W.health.label} — ${W.health.reason}` },
+          { Item: "Tasks finished", Value: W.finished.length },
+          { Item: "Tasks finished (previous week)", Value: W.prevFinished },
+          { Item: "Checklist items ticked", Value: W.itemsDone.length },
+          { Item: "Hours logged", Value: W.hours },
+          { Item: "Hours logged (previous week)", Value: W.prevHours },
+          { Item: "Due this week", Value: W.dueInWeek.length },
+          { Item: "Due this week — done", Value: W.dueDone },
+          { Item: "Slipped", Value: W.slipped.length },
+          { Item: "Still overdue from earlier weeks", Value: W.carriedOver },
+          ...(notes.trim() ? [{ Item: "Notes", Value: notes.trim() }] : []),
+        ],
+        [32, 80]
+      );
+      sheet(
+        "Done",
+        W.finished.map((r) => ({ Task: r.task.title, ...space(r), Assignee: assigneeOf(r.task), Finished: r.doneDate || "", Due: r.due || "", "Hours logged": Number(r.task.actualHours) || 0 })),
+        [44, 14, 12, 12, 12]
+      );
+      sheet(
+        "Checklist",
+        W.itemsDone.map((i) => ({ Task: i.row.task.title, ...space(i.row), List: i.kind, Item: i.item.title, "Done date": i.item.completedAt || "" })),
+        [40, 10, 50, 12]
+      );
+      sheet(
+        "Slipped",
+        W.slipped.map((r) => ({ Task: r.task.title, ...space(r), Assignee: assigneeOf(r.task), Due: r.due || "", Status: r.col?.title || "" })),
+        [44, 14, 12, 14]
+      );
+      sheet(
+        "Next week",
+        W.nextWeek.map((r) => ({ Task: r.task.title, ...space(r), Assignee: assigneeOf(r.task), Due: r.due || "", Status: r.col?.title || "" })),
+        [44, 14, 12, 14]
+      );
+      const taskTitle = new Map(scoped.flatMap((p) => p.tasks.map((t) => [t.id, t.title] as const)));
+      const weekLogs = logs
+        .filter((l) => l.date >= W.start && l.date <= W.end && taskTitle.has(l.taskId) && (!person || sameName(l.assignee || "", person)))
+        .sort((a, b) => a.date.localeCompare(b.date));
+      sheet(
+        "Hours",
+        weekLogs.map((l) => ({ Date: l.date, Person: l.assignee || "", Task: taskTitle.get(l.taskId) || l.taskTitle, Hours: Number(l.hours) || 0, Notes: l.description || "" })),
+        [12, 14, 44, 8, 40]
+      );
+      const safe = (reportTitle.replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40)) || "report";
+      XLSX.writeFile(wb, `${safe}_week_${W.start}.xlsx`);
+    } catch (err) {
+      console.error("Weekly export failed", err);
+      setToast("Sorry — the Excel export failed.");
+    } finally {
+      setExportingXlsx(false);
+    }
+  };
 
   // ---- quick actions on a task (Plan view) ------------------------------------
   const patchTask = (row: Row, patch: Partial<Task>, extra: Task[] = []) => {
@@ -197,7 +368,7 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
     const title = document.title;
     html.classList.remove("dark"); // print on white
     document.body.classList.add("dash-printing");
-    document.title = `${scopeName} – status report ${today}`;
+    document.title = mode === "weekly" ? `${reportTitle} – weekly report ${W.start}` : `${scopeName} – status report ${today}`;
     restoreRef.current = () => {
       if (wasDark) html.classList.add("dark");
       document.body.classList.remove("dash-printing");
@@ -680,6 +851,156 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
     );
   };
 
+  // ---- WEEKLY ------------------------------------------------------------------------------
+  const weekly = () => {
+    const dueRate = W.dueInWeek.length ? Math.round((W.dueDone / W.dueInWeek.length) * 100) : null;
+    const looseItems = W.itemsDone.filter((i) => !W.finished.includes(i.row));
+    const byTask = new Map<Row, typeof looseItems>();
+    looseItems.forEach((i) => byTask.set(i.row, [...(byTask.get(i.row) || []), i]));
+    const maxH = Math.max(1, ...W.hoursByPerson.map((p) => p.hours));
+    const finishedItems = (r: Row) => W.itemsDone.filter((i) => i.row === r).length;
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <StatTile
+            label="Tasks finished"
+            value={W.finished.length}
+            delta={W.finished.length - W.prevFinished}
+            deltaLabel="vs previous week"
+          />
+          <StatTile label="Checklist items ticked" value={W.itemsDone.length} sub={W.itemsDone.length ? `across ${plural(new Set(W.itemsDone.map((i) => i.row)).size, "task")}` : "none with a done date"} />
+          <StatTile
+            label="Hours logged"
+            value={hrs(W.hours)}
+            delta={Math.round((W.hours - W.prevHours) * 10) / 10}
+            deltaLabel="vs previous week"
+          />
+          <StatTile
+            label="Due this week — done"
+            value={W.dueInWeek.length ? `${W.dueDone}/${W.dueInWeek.length}` : "–"}
+            meter={dueRate ?? undefined}
+            sub={dueRate === null ? "nothing was due" : `${dueRate}% of what was due`}
+          />
+          <StatTile
+            label="Slipped"
+            value={W.slipped.length}
+            sub={W.carriedOver ? `+ ${W.carriedOver} still late from earlier weeks` : W.slipped.length ? "due this week, not done" : "nothing slipped"}
+          />
+        </div>
+
+        <ChartCard title="Notes for this report" subtitle={presenting ? undefined : "Highlights, blockers, decisions needed — included in the PDF, Excel and copied text"}>
+          {presenting ? (
+            notes.trim() ? (
+              <p className="text-sm text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed" data-testid="weekly-notes-view">
+                {notes.trim()}
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">No notes this week.</p>
+            )
+          ) : (
+            <textarea
+              id="weekly-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="e.g. Simulation model validated. Waiting on lab access for the bench test — need a decision on the FPGA board by Thursday."
+              className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+            />
+          )}
+        </ChartCard>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {listCard({
+            title: `Done · ${W.finished.length}`,
+            subtitle: "Tasks finished this week, by finish date",
+            items: W.finished,
+            empty: "No tasks finished this week.",
+            limit: 12,
+            render: (r) => {
+              const n = finishedItems(r);
+              return taskLine(r, { text: fmtDay(r.doneDate!), tone: "plain" }, `${r.doneEstimated ? " · counted on its due date" : ""}${n ? ` · ${plural(n, "item")} ticked` : ""}`);
+            },
+          })}
+          <ChartCard title={`Progress on open tasks · ${looseItems.length}`} subtitle="Checklist items and subtasks ticked this week">
+            {byTask.size === 0 ? (
+              <p className="text-xs text-slate-500 dark:text-slate-400 py-3">No checklist items ticked on open tasks.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {[...byTask.entries()].slice(0, 8).map(([row, items], i) => (
+                  <li key={`${row.project.id}:${row.task.id}:${i}`}>
+                    <button type="button" onClick={() => onOpenTask(row.project.id, row.task)} className="text-left text-xs font-semibold text-slate-800 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400">
+                      {row.task.title}
+                      {effScope === "all" ? <span className="font-normal text-slate-500 dark:text-slate-400"> · {row.project.name}</span> : null}
+                    </button>
+                    <ul className="mt-1 space-y-0.5">
+                      {items.map((it, j) => (
+                        <li key={`${it.item.id}:${j}`} className="flex items-center gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                          <CheckCircle2 className="w-3 h-3 shrink-0" style={{ color: "var(--viz-done)" }} />
+                          <span className="min-w-0 flex-1 truncate">{it.item.title}</span>
+                          <span className="text-slate-400 shrink-0">{fmtDay(it.item.completedAt!)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ChartCard>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {listCard({
+            title: `Slipped · ${W.slipped.length}`,
+            subtitle: "Due this week and not done",
+            items: W.slipped,
+            empty: W.current ? "Nothing due so far this week has slipped." : "Nothing slipped this week.",
+            limit: 8,
+            render: (r) => taskLine(r, { text: `was ${fmtDay(r.due!)}`, tone: "late" }, r.col ? ` · ${r.col.title}` : ""),
+          })}
+          {W.current
+            ? listCard({
+                title: `Still due this week · ${W.stillDue.length}`,
+                subtitle: `From today to ${fmtDay(W.end)}`,
+                items: W.stillDue,
+                empty: "Nothing else due this week.",
+                limit: 8,
+                render: (r) => taskLine(r, dueChip(r)),
+              })
+            : listCard({
+                title: `Next week · ${W.nextWeek.length}`,
+                subtitle: weekLabel(addDays(W.start, 7)),
+                items: W.nextWeek,
+                empty: "Nothing due next week.",
+                limit: 8,
+                render: (r) => taskLine(r, { text: fmtDay(r.due!), tone: "plain" }),
+              })}
+          <ChartCard title={`Hours by person · ${hrs(W.hours)}`} subtitle={`From ${plural(W.logEntries, "Daily Logs entry", "Daily Logs entries")} this week`}>
+            <MeterList
+              rows={W.hoursByPerson.map((p) => ({
+                key: p.name,
+                label: p.name,
+                value: p.hours,
+                max: maxH,
+                note: plural(p.entries, "entry", "entries"),
+                figure: <b className="text-slate-900 dark:text-white">{hrs(p.hours)}</b>,
+              }))}
+              empty="No hours logged in Daily Logs this week."
+            />
+          </ChartCard>
+        </div>
+        {W.current &&
+          listCard({
+            title: `Next week · ${W.nextWeek.length}`,
+            subtitle: weekLabel(addDays(W.start, 7)),
+            items: W.nextWeek,
+            empty: "Nothing due next week.",
+            limit: 8,
+            render: (r) => taskLine(r, { text: fmtDay(r.due!), tone: "plain" }),
+          })}
+      </div>
+    );
+  };
+
   // ---- frame -----------------------------------------------------------------------------
   const healthBar = (
     <div className="viz-card flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] px-4 py-2.5" data-testid="health-bar">
@@ -704,6 +1025,9 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
         <button type="button" id="dash-mode-plan" className={segCls(mode === "plan")} onClick={() => setMode("plan")}>
           Plan
         </button>
+        <button type="button" id="dash-mode-weekly" className={segCls(mode === "weekly")} onClick={() => setMode("weekly")}>
+          Weekly
+        </button>
       </div>
       {multi && (
         <select aria-label="Scope" value={effScope} onChange={(e) => setScope(e.target.value as Scope)} className={SELECT}>
@@ -718,6 +1042,33 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
               {p.short}
             </button>
           ))}
+        </div>
+      )}
+      {mode === "weekly" && (
+        <div className="flex items-center gap-1" role="group" aria-label="Week">
+          <button type="button" aria-label="Previous week" onClick={() => setWeekAnchor(addDays(W.start, -7))} className="p-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C2027]">
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <span id="weekly-label" className="px-2 text-xs font-bold text-slate-800 dark:text-slate-100 whitespace-nowrap min-w-[8.5rem] text-center">
+            {weekLabel(W.start)}
+          </span>
+          <button
+            type="button"
+            aria-label="Next week"
+            disabled={W.current}
+            onClick={() => setWeekAnchor(addDays(W.start, 7))}
+            className="p-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C2027] disabled:opacity-40"
+          >
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <div className="flex items-center gap-0.5 p-0.5 ml-1 rounded-lg bg-slate-100 dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B]">
+            <button type="button" className={segCls(W.start === weekBounds(addDays(today, -7)).start)} onClick={() => setWeekAnchor(addDays(today, -7))}>
+              Last week
+            </button>
+            <button type="button" className={segCls(W.current)} onClick={() => setWeekAnchor(today)}>
+              This week
+            </button>
+          </div>
         </div>
       )}
       <select aria-label="Person" value={person} onChange={(e) => setPerson(e.target.value)} className={SELECT}>
@@ -740,6 +1091,21 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
           </>
         ) : (
           <>
+            {mode === "weekly" && (
+              <>
+                <button type="button" id="weekly-copy" onClick={copySummary} title="Copy a text summary for email or chat" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]">
+                  <ClipboardCopy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copy text</span><span className="sm:hidden">Copy</span>
+                </button>
+                {canShare && (
+                  <button type="button" id="weekly-share" onClick={shareSummary} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]">
+                    <Share2 className="w-3.5 h-3.5" /> Share
+                  </button>
+                )}
+                <button type="button" id="weekly-excel" onClick={exportWeekXlsx} disabled={exportingXlsx} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 disabled:opacity-60">
+                  <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+                </button>
+              </>
+            )}
             <button
               type="button"
               id="dash-present"
@@ -768,11 +1134,18 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
     </div>
   );
 
+  const toastEl = toast && (
+    <div role="status" className="no-print fixed z-[60] left-3 right-3 bottom-[76px] md:left-auto md:right-6 md:bottom-6 md:w-96 bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xl">
+      {toast}
+    </div>
+  );
+
   const body = (
     <>
+      {toastEl}
       {controls}
       {healthBar}
-      {mode === "report" ? report() : plan()}
+      {mode === "report" ? report() : mode === "plan" ? plan() : weekly()}
     </>
   );
 
@@ -787,7 +1160,7 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
                 {scopeName}
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {mode === "report" ? `Status report · ${pInfo.label}` : "Planning view"}
+                {mode === "report" ? `Status report · ${pInfo.label}` : mode === "plan" ? "Planning view" : `Weekly report · ${weekLabel(W.start)}${W.current ? " (so far)" : ""}`}
                 {person ? ` · ${person}` : ""} · {fmtLongDay(today)}
               </p>
             </div>

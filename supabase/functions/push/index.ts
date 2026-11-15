@@ -8,7 +8,9 @@
 //   test         -> send a test push to one device
 //   event        -> push a new row from public.notifications (called by a DB trigger)
 //   daily        -> morning digest of date reminders (called hourly by pg_cron;
-//                   each device gets it once a day at 08:00 in its own timezone)
+//                   each device gets it once a day at 08:00 in its own timezone).
+//                   On Sundays it also sends the weekly summary of the week just
+//                   ended (Sun–Sat), which opens the Dashboard's Weekly report.
 //
 // No action accepts message text from the caller: everything pushed is read from
 // the database, and event/daily are idempotent, so calling them again is harmless.
@@ -93,7 +95,9 @@ const dayDiff = (from: string, to: string) =>
 const fmt = (iso: string) =>
   new Date(iso + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
-const isDoneColumn = (title?: string) => !!title && /\b(done|complete|completed|shipped|closed)\b/i.test(title);
+const isDoneColumn = (title?: string) => !!title && (/\b(done|complete|completed|shipped|closed)\b/i.test(title) || /finish/i.test(title));
+const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+const weekday = (iso: string) => new Date(iso + "T00:00:00Z").getUTCDay(); // 0 = Sunday
 
 // deno-lint-ignore no-explicit-any
 type Json = any;
@@ -138,6 +142,46 @@ function alertsFor(projects: Json[], me: string, today: string): Alert[] {
   return out.sort((a, b) => a.severity - b.severity || a.date.localeCompare(b.date));
 }
 
+// Weekly summary for one member: their tasks in the spaces they belong to, for
+// the week that ended yesterday (Sun–Sat). Mirrors src/lib/weekly.ts.
+function weeklyFor(projects: Json[], logs: Json[], me: string, today: string): Payload | null {
+  const start = addDays(today, -7);
+  const end = addDays(today, -1);
+  let finished = 0;
+  let slipped = 0;
+  let dueThisWeek = 0;
+  const myTaskIds = new Set<string>();
+  for (const p of projects) {
+    if (p.archived || !isMember(p, me)) continue;
+    const colTitle = (id: string) => (p.columns || []).find((c: Json) => c.id === id)?.title;
+    for (const t of p.tasks || []) {
+      if (key(t.assignee) !== me) continue;
+      myTaskIds.add(t.id);
+      const done = isDoneColumn(colTitle(t.status));
+      const doneDate = done ? (isDate(t.completedAt) ? t.completedAt : isDate(t.dueDate) ? t.dueDate : null) : null;
+      if (doneDate && doneDate >= start && doneDate <= end) finished++;
+      if (!done && isDate(t.dueDate) && t.dueDate >= start && t.dueDate <= end) slipped++;
+      if (!done && isDate(t.dueDate) && t.dueDate >= today && t.dueDate <= addDays(today, 6)) dueThisWeek++;
+    }
+  }
+  const hours =
+    Math.round(
+      logs
+        .filter((l) => isDate(l?.date) && l.date >= start && l.date <= end && key(l.assignee) === me && myTaskIds.has(l.taskId))
+        .reduce((sum, l) => sum + (Number(l.hours) || 0), 0) * 10
+    ) / 10;
+  if (!finished && !slipped && !dueThisWeek && !hours) return null;
+  const parts = [`${finished} done`];
+  if (slipped) parts.push(`${slipped} slipped`);
+  parts.push(`${hours}h logged`);
+  return {
+    title: "Your week in review",
+    body: `Last week: ${parts.join(" · ")}.${dueThisWeek ? ` This week: ${dueThisWeek} due.` : ""} Tap for the full report.`,
+    tag: `weekly:${today}`,
+    url: "/?view=dashboard&dash=weekly&week=last",
+  };
+}
+
 function localNow(tz: string): { date: string; hour: number } {
   let parts: Intl.DateTimeFormatPart[];
   try {
@@ -177,10 +221,19 @@ async function handleDaily() {
   if (due.length === 0) return { sent: 0 };
 
   const { data: projects } = await db.from("projects").select("id,name,columns,tasks,members,archived");
+  let weeklyLogs: Json[] | null = null; // loaded on Sundays only
   const readCache = new Map<string, Set<string>>();
   let sent = 0;
   for (const { s, now } of due) {
     await db.from("push_subscriptions").update({ last_digest_date: now.date }).eq("endpoint", s.endpoint);
+    if (weekday(now.date) === 0) {
+      if (weeklyLogs === null) {
+        const { data: row } = await db.from("app_state").select("value").eq("key", "daily_logs").maybeSingle();
+        weeklyLogs = Array.isArray(row?.value) ? row!.value : [];
+      }
+      const weekly = weeklyFor(projects || [], weeklyLogs!, s.recipient, now.date);
+      if (weekly && (await send(s, weekly))) sent++;
+    }
     if (!readCache.has(s.recipient)) {
       const { data: reads } = await db.from("notification_reads").select("alert_key").eq("recipient", s.recipient).limit(2000);
       readCache.set(s.recipient, new Set((reads || []).map((r: Json) => r.alert_key)));

@@ -72,7 +72,13 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
       const win = wins.find((w) => new URL(w.url).origin === self.location.origin);
-      if (win) return win.focus();
+      if (win) {
+        // A deep link (e.g. the weekly report) navigates the open window there.
+        if (url !== '/' && 'navigate' in win) {
+          return win.navigate(url).then((w) => (w || win).focus()).catch(() => win.focus());
+        }
+        return win.focus();
+      }
       return self.clients.openWindow(url);
     })
   );
