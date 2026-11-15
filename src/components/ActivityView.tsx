@@ -9,6 +9,7 @@ import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
 import { localToday } from "../lib/notifications";
 import { DailyLog, LOGS_STORAGE_KEY, LOGS_APPEND_EVENT } from "../lib/dailyLogs";
 import { isDoneColumn } from "../lib/dashboard";
+import { nextTaskId } from "../lib/taskIds";
 import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle, CheckSquare } from "lucide-react";
 
 interface ActivityViewProps {
@@ -306,7 +307,7 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
     }
 
     // Determine task ID and label
-    let finalTaskId = "TASK-" + Math.floor(100 + Math.random() * 900);
+    let finalTaskId = nextTaskId(project.tasks);
     let finalTaskTitle = completedText;
     let isNewTask = true;
 
