@@ -55,6 +55,8 @@ import {
 import { DailyLog, LOGS_STORAGE_KEY, LOGS_APPEND_EVENT } from "../lib/dailyLogs";
 import { fetchAppState } from "../lib/supabase-sync";
 import { weekBounds, weekLabel, weeklyReport, weeklyText } from "../lib/weekly";
+import { GOAL_STATE_LABEL, goalStatus } from "../lib/modules";
+import { baselineSummary, fmtSlip, variance } from "../lib/baseline";
 import { ChartCard, LoadHeatmap, MeterList, ProgressChart, SegmentedBar, StatTile, TableData, WeekColumns } from "./dashboard/charts";
 
 interface DashboardViewProps {
@@ -203,6 +205,26 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
   const upcoming = useMemo(() => comingUp(rows, today, horizon), [rows, today, horizon]);
   const pstats = useMemo(() => peopleStats(rows, today), [rows, today]);
   const mods = useMemo(() => (effScope === "space" ? moduleStats(activeProject, rows) : []), [effScope, activeProject, rows]);
+  const goals = useMemo(
+    () => (effScope === "space" ? (activeProject.goals || []).map((g) => goalStatus(g, activeProject, today)) : []),
+    [effScope, activeProject, today]
+  );
+  // Baseline variance for the tasks shown (respects the person filter).
+  const bsum = useMemo(
+    () => (effScope === "space" ? baselineSummary({ ...activeProject, tasks: rows.map((r) => r.task) }, today) : null),
+    [effScope, activeProject, rows, today]
+  );
+  const slipped = useMemo(
+    () =>
+      bsum
+        ? rows
+            .filter((r) => !r.done && r.task.baseline)
+            .map((r) => ({ r, v: variance(r.task, r.project, today)! }))
+            .filter((x) => x.v && x.v.finishSlip > 0)
+            .sort((a, b) => b.v.finishSlip - a.v.finishSlip)
+        : [],
+    [bsum, rows, today]
+  );
   const load = useMemo(() => loadMatrix(rows, today, 6), [rows, today]);
   const accuracy = useMemo(() => estimateAccuracy(rows), [rows]);
   const spaces = useMemo(() => (effScope === "all" ? portfolio(scoped, today, person || null) : []), [effScope, scoped, today, person]);
@@ -680,6 +702,111 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
             />
           </ChartCard>
         </div>
+
+        {(goals.length > 0 || bsum) && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            {goals.length > 0 && (
+              <ChartCard
+                className={bsum ? "lg:col-span-7" : "lg:col-span-12"}
+                title={`Goals · ${goals.filter((g) => g.state === "done").length}/${goals.length} achieved`}
+                subtitle="Progress comes from the tasks in each goal's modules"
+              >
+                <ul id="dash-goals" className="space-y-3">
+                  {goals.map((g) => {
+                    const color =
+                      g.state === "overdue"
+                        ? "var(--viz-late)"
+                        : g.state === "at-risk"
+                        ? "var(--viz-warning)"
+                        : g.state === "done"
+                        ? "var(--viz-done)"
+                        : "var(--viz-accent)";
+                    const when =
+                      g.daysLeft !== null && g.state !== "done"
+                        ? g.daysLeft < 0
+                          ? `${-g.daysLeft} days past ${fmtDay(g.goal.timeBound)}`
+                          : g.daysLeft === 0
+                          ? "due today"
+                          : `${g.daysLeft} days left · ${fmtDay(g.goal.timeBound)}`
+                        : g.goal.timeBound
+                        ? fmtDay(g.goal.timeBound)
+                        : "no target date";
+                    return (
+                      <li key={g.goal.id}>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-100 min-w-0">{g.goal.title || "Untitled goal"}</span>
+                          <span className="text-[11px] tabular-nums whitespace-nowrap text-slate-600 dark:text-slate-300">
+                            <b className="text-slate-900 dark:text-white">{g.progress}%</b>
+                          </span>
+                        </div>
+                        <div
+                          className="relative mt-1 h-2 rounded-full overflow-hidden"
+                          style={{ background: "var(--viz-accent-soft)" }}
+                          role="img"
+                          aria-label={`${g.goal.title}: ${g.progress}% done${g.expected !== null ? `, ${g.expected}% of the time used` : ""}`}
+                        >
+                          <div className="h-full rounded-full" style={{ width: `${g.progress}%`, background: color }} />
+                          {g.expected !== null && g.state !== "done" && (
+                            <span
+                              className="absolute top-0 bottom-0 w-0.5"
+                              style={{ left: `calc(${g.expected}% - 1px)`, background: "var(--viz-ink)" }}
+                              title={`${g.expected}% of the time to the target date has passed`}
+                            />
+                          )}
+                        </div>
+                        <div className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                          <b className="font-semibold text-slate-700 dark:text-slate-200">{GOAL_STATE_LABEL[g.state]}</b> · {when}
+                          {g.tasks ? ` · ${g.done}/${g.tasks} tasks` : " · progress set by hand"}
+                          {g.modules.length ? ` · ${g.modules.map((m) => m.name).join(", ")}` : ""}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {goals.some((g) => g.expected !== null && g.state !== "done") && (
+                  <p className="mt-3 text-[10px] text-slate-500 dark:text-slate-400">The thin mark on each bar is how much of the time to the target date has passed.</p>
+                )}
+              </ChartCard>
+            )}
+            {bsum && (
+              <ChartCard
+                className={goals.length > 0 ? "lg:col-span-5" : "lg:col-span-12"}
+                title="Against the baseline"
+                subtitle={`Saved plan${bsum.setAt ? ` from ${fmtDay(bsum.setAt)}` : ""} vs the plan now · ${plural(bsum.baselined, "task")}`}
+              >
+                <div id="dash-baseline" className="grid grid-cols-3 gap-2 mb-3">
+                  {[
+                    { k: "Later", v: bsum.late },
+                    { k: "On plan", v: bsum.onPlan },
+                    { k: "Earlier", v: bsum.early },
+                  ].map((x) => (
+                    <div key={x.k} className="rounded-lg border border-slate-200 dark:border-[#1E222B] px-2.5 py-2">
+                      <div className="text-lg font-black text-slate-900 dark:text-white tabular-nums">{x.v}</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400">{x.k}</div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 mb-2">
+                  Average slip <b className="text-slate-900 dark:text-white">{bsum.avgSlip > 0 ? "+" : ""}{bsum.avgSlip} days</b>
+                  {bsum.baselineFinish && bsum.currentFinish && (
+                    <>
+                      {" "}· last finish {fmtDay(bsum.baselineFinish)} → <b className="text-slate-900 dark:text-white">{fmtDay(bsum.currentFinish)}</b> ({fmtSlip(bsum.finishSlip)})
+                    </>
+                  )}
+                </p>
+                {slipped.length > 0 ? (
+                  <ul className="divide-y divide-slate-100 dark:divide-[#1A1E26] -my-1">
+                    {slipped.slice(0, 5).map((x, i) => (
+                      <li key={`${x.r.task.id}:${i}`}>{taskLine(x.r, { text: fmtSlip(x.v.finishSlip), tone: "late" })}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">No open task is finishing later than planned.</p>
+                )}
+              </ChartCard>
+            )}
+          </div>
+        )}
       </div>
     );
   };

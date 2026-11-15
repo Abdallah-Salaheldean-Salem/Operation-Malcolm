@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { GOAL_STATE_LABEL, goalStatus } from "../lib/modules";
+import { buildGoalsModulesGuide, exportGoalsModules, GoalsModulesPlan, parseLooseJson, planGoalsModulesImport } from "../lib/goalsModulesIO";
+import { localToday } from "../lib/notifications";
 import DateInput from "./DateInput";
 import { Project, Task, ProjectModule, SmartGoal, ModuleReadiness } from "../types";
 import { MODULE_READINESS } from "../data";
@@ -15,6 +18,10 @@ import {
   Calendar,
   ChevronRight,
   LayoutGrid,
+  Download,
+  Upload,
+  Sparkles,
+  FileJson,
 } from "lucide-react";
 
 interface ModulesViewProps {
@@ -56,6 +63,55 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
 
   const modules = project.modules || [];
   const goals = project.goals || [];
+  const today = localToday();
+
+  // ---- AI round trip: download a guide, import the AI's JSON back ----
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importPlan, setImportPlan] = useState<GoalsModulesPlan | null>(null);
+  const [importMsg, setImportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const safeName = (project.name || "space").replace(/[^\w\-]+/g, "_");
+  const downloadFile = (content: string, name: string, type: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const downloadGuide = () =>
+    downloadFile(
+      buildGoalsModulesGuide(project, (typeof document !== "undefined" && document.title) || "Task tracker", today),
+      `${safeName}_goals-modules_AI-guide.md`,
+      "text/markdown;charset=utf-8"
+    );
+  const exportCurrent = () =>
+    downloadFile(JSON.stringify(exportGoalsModules(project), null, 2), `${safeName}_goals-modules_${today}.json`, "application/json");
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportMsg(null);
+    try {
+      setImportPlan(planGoalsModulesImport(project, parseLooseJson(await file.text())));
+    } catch (err) {
+      setImportMsg({ ok: false, text: err instanceof SyntaxError ? "That file isn't valid JSON. Ask the AI to reply with only the JSON." : (err as Error).message });
+    }
+  };
+  const applyImport = () => {
+    if (!importPlan) return;
+    onUpdateProject(importPlan.project);
+    const p = importPlan;
+    const parts: string[] = [];
+    if (p.modulesAdded.length) parts.push(`${p.modulesAdded.length} module${p.modulesAdded.length === 1 ? "" : "s"} added`);
+    if (p.modulesUpdated.length) parts.push(`${p.modulesUpdated.length} updated`);
+    if (p.goalsAdded.length) parts.push(`${p.goalsAdded.length} goal${p.goalsAdded.length === 1 ? "" : "s"} added`);
+    if (p.goalsUpdated.length) parts.push(`${p.goalsUpdated.length} goal${p.goalsUpdated.length === 1 ? "" : "s"} updated`);
+    if (p.tasksLinked) parts.push(`${p.tasksLinked} task${p.tasksLinked === 1 ? "" : "s"} linked`);
+    setImportMsg({ ok: true, text: parts.length ? parts.join(" · ") : "Nothing changed — everything in the file was already here." });
+    setImportPlan(null);
+  };
   const memberNames = ["Unassigned", ...(project.members?.map((m) => m.name) || [])];
 
   // --- persistence helpers ---
@@ -194,6 +250,120 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
 
   return (
     <div id="modules-view-root" className="flex flex-col h-full flex-1 overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-4 md:p-6 space-y-6 select-none">
+      {/* ============ BUILD WITH AI ============ */}
+      <section id="goals-modules-ai" className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl p-3.5 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center gap-3">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-slate-900 dark:text-white">Build goals & modules with AI</div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                Download the guide, give it to ChatGPT, Claude or Gemini, save its reply as a <b>.json</b> file and import it here. The guide already lists this space's {project.tasks.length} tasks, so the AI can group them.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              id="gm-download-guide"
+              onClick={downloadGuide}
+              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" /> 1. AI guide (.md)
+            </button>
+            <button
+              id="gm-import"
+              onClick={() => importRef.current?.click()}
+              className="px-3 py-1.5 bg-white dark:bg-[#1C1F26] border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-pointer hover:border-indigo-400"
+            >
+              <Upload className="w-3.5 h-3.5" /> 2. Import from AI (.json)
+            </button>
+            {(modules.length > 0 || goals.length > 0) && (
+              <button
+                id="gm-export"
+                onClick={exportCurrent}
+                title="Download the current goals & modules as a file you can edit and import back"
+                className="px-2.5 py-1.5 text-slate-500 dark:text-slate-400 text-xs font-semibold rounded-lg flex items-center gap-1.5 cursor-pointer hover:text-slate-800 dark:hover:text-slate-200"
+              >
+                <FileJson className="w-3.5 h-3.5" /> Export
+              </button>
+            )}
+            <input ref={importRef} type="file" accept=".json,application/json,.txt,text/plain" className="hidden" onChange={handleImportFile} />
+          </div>
+        </div>
+        {importMsg && (
+          <div
+            id="gm-import-msg"
+            className={`mt-3 text-[11px] font-semibold px-3 py-2 rounded-lg border flex items-start justify-between gap-2 ${
+              importMsg.ok
+                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300"
+                : "bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-300"
+            }`}
+          >
+            <span>{importMsg.text}</span>
+            <button onClick={() => setImportMsg(null)} className="shrink-0 opacity-70 hover:opacity-100" aria-label="Dismiss">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </section>
+
+      {importPlan && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setImportPlan(null)}>
+          <div
+            id="gm-import-preview"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full sm:max-w-lg max-h-[85vh] overflow-y-auto bg-white dark:bg-[#17191E] border border-slate-200 dark:border-slate-700 rounded-t-2xl sm:rounded-2xl shadow-2xl p-4 select-text"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">Review the import</h3>
+              <button onClick={() => setImportPlan(null)} className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200" aria-label="Close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {[
+                { k: "Modules", v: importPlan.modulesAdded.length + importPlan.modulesUpdated.length },
+                { k: "Goals", v: importPlan.goalsAdded.length + importPlan.goalsUpdated.length },
+                { k: "Tasks linked", v: importPlan.tasksLinked },
+              ].map((x) => (
+                <div key={x.k} className="rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-2">
+                  <div className="text-lg font-black text-slate-900 dark:text-white tabular-nums">{x.v}</div>
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">{x.k}</div>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 text-[11px] text-slate-600 dark:text-slate-300">
+              {importPlan.modulesAdded.length > 0 && <p><b className="text-slate-900 dark:text-white">New modules:</b> {importPlan.modulesAdded.join(", ")}</p>}
+              {importPlan.modulesUpdated.length > 0 && <p><b className="text-slate-900 dark:text-white">Updated modules:</b> {importPlan.modulesUpdated.join(", ")}</p>}
+              {importPlan.goalsAdded.length > 0 && <p><b className="text-slate-900 dark:text-white">New goals:</b> {importPlan.goalsAdded.join(" · ")}</p>}
+              {importPlan.goalsUpdated.length > 0 && <p><b className="text-slate-900 dark:text-white">Updated goals:</b> {importPlan.goalsUpdated.join(" · ")}</p>}
+              {importPlan.unknownTasks.length > 0 && (
+                <p className="text-amber-700 dark:text-amber-300">
+                  {importPlan.unknownTasks.length} task id{importPlan.unknownTasks.length === 1 ? "" : "s"} not found here (ignored): {importPlan.unknownTasks.slice(0, 8).join(", ")}
+                  {importPlan.unknownTasks.length > 8 ? "…" : ""}
+                </p>
+              )}
+              {importPlan.warnings.length > 0 && (
+                <ul className="list-disc pl-4 text-amber-700 dark:text-amber-300 space-y-0.5">
+                  {importPlan.warnings.slice(0, 10).map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                  {importPlan.warnings.length > 10 && <li>+ {importPlan.warnings.length - 10} more</li>}
+                </ul>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button onClick={() => setImportPlan(null)} className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">
+                Cancel
+              </button>
+              <button id="gm-apply" onClick={applyImport} className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg">
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ============ SMART GOALS SECTION ============ */}
       <section id="smart-goals-section">
         <div className="flex items-center justify-between gap-3 mb-3">
@@ -222,7 +392,8 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {goals.map((g) => {
               const linkedModules = (g.moduleIds || []).map(id => modules.find(m => m.id === id)).filter(Boolean) as ProjectModule[];
-              const overdue = g.timeBound && new Date(g.timeBound) < new Date() && (g.progress || 0) < 100;
+              const gs = goalStatus(g, project, today);
+              const overdue = gs.state === "overdue";
               const smartRows: [string, string, string][] = [
                 ["S", "Specific", g.specific],
                 ["M", "Measurable", g.measurable],
@@ -293,18 +464,46 @@ export default function ModulesView({ project, onUpdateProject, onOpenTaskModal 
 
                   {/* progress */}
                   <div className="mt-auto">
-                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 gap-2">
                       <span className="uppercase tracking-wider">Progress</span>
-                      <span className="text-slate-700 dark:text-slate-200">{g.progress || 0}%</span>
+                      <span
+                        className={`ml-auto px-1.5 py-px rounded border text-[9px] ${
+                          gs.state === "overdue"
+                            ? "bg-rose-500/10 border-rose-500/25 text-rose-700 dark:text-rose-300"
+                            : gs.state === "at-risk"
+                            ? "bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-300"
+                            : gs.state === "done" || gs.state === "on-track"
+                            ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-700 dark:text-emerald-300"
+                            : "bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500"
+                        }`}
+                        data-testid="goal-state"
+                      >
+                        {GOAL_STATE_LABEL[gs.state]}
+                      </span>
+                      <span className="text-slate-700 dark:text-slate-200">{gs.progress}%</span>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={g.progress || 0}
-                      onChange={(e) => saveGoal({ ...g, progress: Number(e.target.value) })}
-                      className="w-full accent-indigo-600 cursor-pointer h-1.5"
-                    />
+                    {gs.derived !== null ? (
+                      <>
+                        <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${gs.progress}%` }} />
+                        </div>
+                        <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400">
+                          {gs.done}/{gs.tasks} tasks done in the linked modules
+                          {gs.expected !== null && gs.state !== "done" ? ` · ${gs.expected}% of the time used` : ""}
+                        </p>
+                      </>
+                    ) : (
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={g.progress || 0}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => saveGoal({ ...g, progress: Number(e.target.value) })}
+                        className="w-full accent-indigo-600 cursor-pointer h-1.5"
+                        title="Set by hand — link modules with tasks to calculate it automatically"
+                      />
+                    )}
                   </div>
                 </div>
               );

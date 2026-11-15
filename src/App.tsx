@@ -24,6 +24,7 @@ import { appendDailyLog } from "./lib/dailyLogs";
 import TimerButton from "./components/TimerButton";
 import DashboardView from "./components/DashboardView";
 import { stampCompletion } from "./lib/dashboard";
+import { NO_MODULE } from "./lib/modules";
 import {
   RemoteNotification,
   fetchNotifications,
@@ -89,7 +90,8 @@ import {
   Lightbulb,
   Lock,
   ShieldCheck,
-  ShieldQuestion
+  ShieldQuestion,
+  Boxes
 } from "lucide-react";
 
 // ClickUp-style Space accent colors offered in the sidebar picker.
@@ -138,6 +140,7 @@ export default function App() {
   const [globalPriority, setGlobalPriority] = useState("all");
   const [globalAssignee, setGlobalAssignee] = useState("all");
   const [globalStatus, setGlobalStatus] = useState("all");
+  const [globalModule, setGlobalModule] = useState("all");
 
   // --- Workspace access control (client-side soft gate) ---
   const [access, setAccessState] = useState<AccessState>(() => loadAccess());
@@ -450,6 +453,9 @@ export default function App() {
     visibleProjects.find((p) => p.id === activeProjectId) ||
     visibleProjects[0] ||
     projects[0];
+  // A module filter only applies while that module exists in the open space.
+  const effGlobalModule =
+    globalModule === NO_MODULE || (activeProject?.modules || []).some((m) => m.id === globalModule) ? globalModule : "all";
 
   // Depth-ordered flattening of visible Spaces for the selector (sub-spaces
   // nested under parents; orphans whose parent is hidden are treated as roots).
@@ -1511,10 +1517,10 @@ export default function App() {
         </div>
 
         {/* 4. TABS & GLOBAL FILTER TOOLBAR ROW */}
-        <div id="workspace-tabs-filter-bar" className="px-3 md:px-6 py-2 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#161A22] hidden md:flex flex-col xl:flex-row xl:items-center justify-between gap-3 shrink-0 select-none">
+        <div id="workspace-tabs-filter-bar" className="px-3 md:px-6 py-2 bg-slate-100 dark:bg-[#0B0D11] border-b border-slate-200 dark:border-[#161A22] hidden md:flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-2 2xl:gap-3 shrink-0 select-none">
           
           {/* Horizontal custom sliding views tabs (desktop; mobile uses the bottom nav) */}
-          <div className="hidden md:flex items-center space-x-1.5">
+          <div className="hidden md:flex items-center space-x-1.5 min-w-0">
             <button 
               onClick={() => handleSlideTabs("left")} 
               className="p-1 hover:bg-white dark:hover:bg-[#14171C] hover:text-slate-900 dark:text-white rounded text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
@@ -1555,7 +1561,7 @@ export default function App() {
           </div>
 
           {/* Unified Global Filters row (the Dashboard has its own filters) */}
-          <div className={`${activeView === "dashboard" ? "hidden" : "flex"} flex-wrap items-center gap-2.5`}>
+          <div className={`${activeView === "dashboard" ? "hidden" : "flex"} flex-wrap items-center gap-2.5 2xl:shrink-0`}>
             
             {/* Search Input */}
             <div className="relative">
@@ -1619,6 +1625,27 @@ export default function App() {
               </select>
             </div>
 
+            {/* Module Filter (only when the space has modules) */}
+            {(activeProject.modules || []).length > 0 && (
+              <div className="flex items-center space-x-1.5 bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1">
+                <Boxes className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                <select
+                  id="global-module-filter"
+                  value={effGlobalModule}
+                  onChange={(e) => setGlobalModule(e.target.value)}
+                  className="bg-transparent text-[11px] font-semibold text-slate-500 dark:text-slate-400 focus:outline-none cursor-pointer max-w-[10rem]"
+                >
+                  <option value="all" className="bg-white dark:bg-[#14171C] text-slate-700 dark:text-slate-300">All Modules</option>
+                  {(activeProject.modules || []).map((m) => (
+                    <option key={m.id} value={m.id} className="bg-white dark:bg-[#14171C] text-slate-700 dark:text-slate-300">
+                      {m.icon ? `${m.icon} ` : ""}{m.name}
+                    </option>
+                  ))}
+                  <option value={NO_MODULE} className="bg-white dark:bg-[#14171C] text-slate-700 dark:text-slate-300">No module</option>
+                </select>
+              </div>
+            )}
+
           </div>
         </div>
 
@@ -1676,6 +1703,7 @@ export default function App() {
               globalPriority={globalPriority}
               globalAssignee={globalAssignee}
               globalStatus={globalStatus}
+              globalModule={effGlobalModule}
             />
           )}
 
@@ -1688,11 +1716,13 @@ export default function App() {
               globalPriority={globalPriority}
               globalAssignee={globalAssignee}
               globalStatus={globalStatus}
+              globalModule={effGlobalModule}
               onClearFilter={(field) => {
                 if (field === "search") setGlobalSearch("");
                 else if (field === "priority") setGlobalPriority("all");
                 else if (field === "assignee") setGlobalAssignee("all");
                 else if (field === "status") setGlobalStatus("all");
+                else if (field === "module") setGlobalModule("all");
               }}
             />
           )}
@@ -1706,6 +1736,7 @@ export default function App() {
               globalPriority={globalPriority}
               globalAssignee={globalAssignee}
               globalStatus={globalStatus}
+              globalModule={effGlobalModule}
             />
           )}
 
@@ -1881,6 +1912,7 @@ export default function App() {
           projectTags={activeProject.tags}
           projectMembers={["Unassigned", ...(activeProject.members?.map(m => m.name).filter(n => n !== "Unassigned") || ["Abdallah", "Sallam", "Alice", "Bob", "Charlie", "Diana"])]}
           allTasks={activeProject.tasks}
+          projectModules={activeProject.modules || []}
           checklistTemplates={checklistTemplates[activeProjectId] || []}
           onSaveTemplate={(name, items) => handleSaveChecklistTemplate(activeProjectId, name, items)}
           onDeleteTemplate={(id) => handleDeleteChecklistTemplate(activeProjectId, id)}

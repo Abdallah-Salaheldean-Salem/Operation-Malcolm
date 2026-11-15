@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { matchesModule } from "../lib/modules";
 import { Project, Task, TaskPriority } from "../types";
 import { 
   ChevronLeft, 
@@ -24,6 +25,7 @@ interface CalendarViewProps {
   globalPriority: string;
   globalAssignee: string;
   globalStatus: string;
+  globalModule?: string;
 }
 
 export default function CalendarView({
@@ -34,6 +36,7 @@ export default function CalendarView({
   globalPriority,
   globalAssignee,
   globalStatus,
+  globalModule,
 }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [draggedOverDate, setDraggedOverDate] = useState<string | null>(null);
@@ -127,6 +130,8 @@ export default function CalendarView({
         if (task.status !== globalStatus) return false;
       }
 
+      if (!matchesModule(task, project.modules, globalModule)) return false;
+
       return true;
     });
   };
@@ -154,6 +159,8 @@ export default function CalendarView({
       if (globalStatus && globalStatus !== "all") {
         if (task.status !== globalStatus) return false;
       }
+
+      if (!matchesModule(task, project.modules, globalModule)) return false;
 
       return true;
     });

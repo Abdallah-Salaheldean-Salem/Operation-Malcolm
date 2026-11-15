@@ -2,6 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import DateInput from "./DateInput";
 import { Project, Task, BoardColumn, TaskPriority } from "../types";
 import { PRIORITIES } from "../data";
+import { applyBaseline, baselineSummary, clearBaseline, fmtSlip, variance } from "../lib/baseline";
+import { NO_MODULE, matchesModule, moduleOfTask } from "../lib/modules";
+import { localToday } from "../lib/notifications";
+import { nextTaskId } from "../lib/taskIds";
 import {
   Calendar,
   Info,
@@ -37,7 +41,43 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
   const [zoomMode, setZoomMode] = useState<"day" | "week" | "month">(() =>
     typeof window !== "undefined" && window.innerWidth < 768 ? "week" : "day"
   );
-  const [groupBy, setGroupBy] = useState<"none" | "status" | "assignee" | "priority">("status");
+  const [groupBy, setGroupBy] = useState<"none" | "status" | "assignee" | "priority" | "module">("status");
+  const [filterModule, setFilterModule] = useState("all");
+  const [showBaseline, setShowBaseline] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("gantt_show_baseline") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const [baselineMenuOpen, setBaselineMenuOpen] = useState(false);
+  const today = localToday();
+  const modules = project.modules || [];
+  const bSummary = useMemo(() => baselineSummary(project, today), [project, today]);
+  const toggleShowBaseline = () => {
+    setShowBaseline((v) => {
+      try {
+        localStorage.setItem("gantt_show_baseline", v ? "0" : "1");
+      } catch {
+        /* storage blocked: fine for this session */
+      }
+      return !v;
+    });
+  };
+  const doBaseline = (mode: "all" | "missing" | "clear") => {
+    setBaselineMenuOpen(false);
+    if (!onUpdateProject) return;
+    if (mode === "clear") {
+      if (!window.confirm("Clear the saved baseline from every task in this space? The current dates stay as they are.")) return;
+      onUpdateProject(clearBaseline(project));
+      return;
+    }
+    if (mode === "all" && bSummary && !window.confirm("Replace the saved baseline with today's dates? Slip will be measured from today's plan from now on.")) return;
+    const { project: next, count } = applyBaseline(project, today, mode);
+    if (count > 0) onUpdateProject(next);
+    if (count === 0) window.alert(mode === "missing" ? "Every dated task already has a baseline." : "No task has dates yet, so there is nothing to freeze.");
+    setShowBaseline(true);
+  };
   const [isCriticalPathEnabled, setIsCriticalPathEnabled] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
@@ -95,9 +135,9 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
       const weeksList: { key: string; label: string; subLabel: string; startStr: string; endStr: string }[] = [];
       let trackingDate = new Date(currentYear, currentMonth, 1);
       for (let w = 0; w < 12; w++) {
-        const startStr = trackingDate.toISOString().split("T")[0];
-        const endOfWeek = new Date(trackingDate.getTime() + 6 * 86400000);
-        const endStr = endOfWeek.toISOString().split("T")[0];
+        const startStr = localToday(trackingDate);
+        const endOfWeek = new Date(trackingDate.getFullYear(), trackingDate.getMonth(), trackingDate.getDate() + 6);
+        const endStr = localToday(endOfWeek);
         const mStart = trackingDate.toLocaleString("default", { month: "short" });
         weeksList.push({
           key: `week-${w}-${startStr}`,
@@ -106,7 +146,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
           startStr,
           endStr,
         });
-        trackingDate = new Date(trackingDate.getTime() + 7 * 86400000);
+        trackingDate = new Date(trackingDate.getFullYear(), trackingDate.getMonth(), trackingDate.getDate() + 7);
       }
       return {
         keys: weeksList.map((w) => w.key),
@@ -206,9 +246,25 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
       const matchesAssignee = !filterAssignee || (task.assignee || "Unassigned") === filterAssignee;
       const matchesPriority = !filterPriority || task.priority === filterPriority;
       const matchesStatus = !filterStatus || task.status === filterStatus;
-      return matchesSearch && matchesAssignee && matchesPriority && matchesStatus;
+      return matchesSearch && matchesAssignee && matchesPriority && matchesStatus && matchesModule(task, modules, filterModule);
     });
-  }, [project.tasks, searchQuery, filterAssignee, filterPriority, filterStatus]);
+  }, [project.tasks, searchQuery, filterAssignee, filterPriority, filterStatus, filterModule, modules]);
+
+  // Baseline variance per task (finish slip in days)
+  const varianceById = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof variance>>();
+    if (!bSummary) return m;
+    project.tasks.forEach((t) => {
+      if (t.baseline) m.set(t.id, variance(t, project, today));
+    });
+    return m;
+  }, [project, today, bSummary]);
+  const slipClass = (n: number) =>
+    n > 0
+      ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:border-rose-500/30"
+      : n < 0
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30"
+      : "bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-800/60 dark:text-slate-400 dark:border-slate-700";
 
   // Critical path mapping
   const criticalPathIds = useMemo(() => {
@@ -280,6 +336,19 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
           tasks: filteredTasks.filter((t) => (t.assignee || "Unassigned") === ass),
         };
       });
+    } else if (groupBy === "module") {
+      modules.forEach((m) => {
+        groups[m.id] = {
+          label: `${m.icon ? `${m.icon} ` : ""}${m.name}`,
+          color: m.color || "#6366f1",
+          tasks: filteredTasks.filter((t) => moduleOfTask(t, modules)?.id === m.id),
+        };
+      });
+      groups[NO_MODULE] = {
+        label: "No module",
+        color: "#64748b",
+        tasks: filteredTasks.filter((t) => !moduleOfTask(t, modules)),
+      };
     } else {
       PRIORITIES.forEach((p) => {
         groups[p.value] = {
@@ -290,7 +359,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
       });
     }
     return groups;
-  }, [filteredTasks, groupBy, project.columns, project.tasks]);
+  }, [filteredTasks, groupBy, project.columns, project.tasks, modules]);
 
   // Combined Rows representation for absolute alignment on left and right sides!
   const flatVisibleRows = useMemo(() => {
@@ -357,9 +426,10 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
       if (parts.length !== 3 || isNaN(parts[0])) return new Date();
       return new Date(parts[0], parts[1] - 1, parts[2]);
     };
-    const formatDate = (d: Date) => d.toISOString().split("T")[0];
-    const newStart = new Date(parseDateStr(task.startDate).getTime() + startDelta * 86400000);
-    const newDue = new Date(parseDateStr(task.dueDate || task.startDate).getTime() + dueDelta * 86400000);
+    const formatDate = (d: Date) => localToday(d);
+    const shift = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+    const newStart = shift(parseDateStr(task.startDate), startDelta);
+    const newDue = shift(parseDateStr(task.dueDate || task.startDate), dueDelta);
 
     onUpdateProject({
       ...project,
@@ -382,13 +452,13 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
     if (!quickTitle.trim() || !onUpdateProject) return;
 
     const newTask: Task = {
-      id: `task-${Date.now()}`,
+      id: nextTaskId(project.tasks),
       title: quickTitle.trim(),
       description: "Fast-created Gantt schedule",
       status: project.columns[0]?.id || "col-todo",
       priority: "medium",
-      startDate: quickStart || new Date().toISOString().split("T")[0],
-      dueDate: quickDue || quickStart || new Date().toISOString().split("T")[0],
+      startDate: quickStart || localToday(),
+      dueDate: quickDue || quickStart || localToday(),
       assignee: "Unassigned",
       tags: [],
       estimatedHours: 8,
@@ -410,7 +480,7 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
   const gridWidth = columnsData.headers.length * columnsData.columnWidth;
 
   const todayIndex = useMemo(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = localToday();
     if (zoomMode === "day") {
       const idx = columnsData.keys.indexOf(todayStr);
       return idx !== -1 ? idx : Math.floor(columnsData.keys.length / 2);
@@ -597,6 +667,9 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
               <option value="priority" className={"bg-white dark:bg-[#14171C]"}>
                 Task Urgency Priority
               </option>
+              <option value="module" className={"bg-white dark:bg-[#14171C]"}>
+                Module
+              </option>
             </select>
           </div>
         </div>
@@ -605,6 +678,61 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
         <div className="flex flex-wrap items-center gap-3">
           {/* Quick theme toggler */}
           
+
+          {/* Baseline: freeze today's plan, then compare */}
+          <div className="relative">
+            <button
+              id="gantt-baseline-btn"
+              onClick={() => setBaselineMenuOpen((o) => !o)}
+              className={`px-2.5 py-1.5 rounded-lg border text-[10px] font-bold flex items-center space-x-1.5 cursor-pointer transition-all ${
+                bSummary && showBaseline
+                  ? "bg-slate-800 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-300"
+                  : "bg-slate-50 dark:bg-[#0F1115] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+              aria-expanded={baselineMenuOpen}
+            >
+              <span className="inline-block w-3.5 h-1.5 rounded-sm border border-current opacity-70" />
+              <span>Baseline{bSummary ? ` · ${bSummary.late} late` : ""}</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            {baselineMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setBaselineMenuOpen(false)} />
+                <div
+                  id="gantt-baseline-menu"
+                  className="absolute right-0 lg:right-auto lg:left-0 mt-1 w-64 z-50 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#17191E] shadow-2xl p-1.5 text-[11px]"
+                >
+                  <p className="px-2.5 pt-1.5 pb-2 text-[10px] leading-snug text-slate-500 dark:text-slate-400">
+                    {bSummary
+                      ? `Saved ${bSummary.setAt || ""} for ${bSummary.baselined} task${bSummary.baselined === 1 ? "" : "s"}. The grey bar under each task is the plan you saved; the coloured bar is the plan now.`
+                      : "Save today's dates as the baseline. Later, each bar shows how far the plan has moved from it."}
+                  </p>
+                  {!bSummary ? (
+                    <button onClick={() => doBaseline("all")} className="w-full text-left px-2.5 py-2 rounded-lg font-bold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800">
+                      Save baseline now
+                    </button>
+                  ) : (
+                    <>
+                      <button onClick={toggleShowBaseline} className="w-full text-left px-2.5 py-2 rounded-lg font-bold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800">
+                        {showBaseline ? "Hide baseline bars" : "Show baseline bars"}
+                      </button>
+                      {bSummary.unbaselined > 0 && (
+                        <button onClick={() => doBaseline("missing")} className="w-full text-left px-2.5 py-2 rounded-lg font-bold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800">
+                          Add {bSummary.unbaselined} new task{bSummary.unbaselined === 1 ? "" : "s"} to the baseline
+                        </button>
+                      )}
+                      <button onClick={() => doBaseline("all")} className="w-full text-left px-2.5 py-2 rounded-lg font-bold text-slate-800 dark:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800">
+                        Re-baseline with today's dates…
+                      </button>
+                      <button onClick={() => doBaseline("clear")} className="w-full text-left px-2.5 py-2 rounded-lg font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10">
+                        Clear baseline…
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Critical path toggle */}
           <button
@@ -624,8 +752,8 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
           {/* Quick-add */}
           <button
             onClick={() => {
-              setQuickStart(new Date().toISOString().split("T")[0]);
-              setQuickDue(new Date().toISOString().split("T")[0]);
+              setQuickStart(localToday());
+              setQuickDue(localToday());
               setIsQuickAddOpen(true);
             }}
             className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black flex items-center space-x-1 transition-all cursor-pointer shadow-sm"
@@ -680,6 +808,25 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
             ))}
           </select>
 
+          {modules.length > 0 && (
+            <select
+              id="gantt-module-filter"
+              value={filterModule}
+              onChange={(e) => setFilterModule(e.target.value)}
+              className={`border rounded px-2 py-0.5 font-bold focus:outline-none cursor-pointer ${
+                "bg-white dark:bg-[#14171C] border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300"
+              }`}
+            >
+              <option value="all">Modules: All</option>
+              {modules.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.icon ? `${m.icon} ` : ""}{m.name}
+                </option>
+              ))}
+              <option value={NO_MODULE}>No module</option>
+            </select>
+          )}
+
           <input
             type="text"
             value={searchQuery}
@@ -690,13 +837,14 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
             }`}
           />
 
-          {(searchQuery || filterAssignee || filterPriority || filterStatus) && (
+          {(searchQuery || filterAssignee || filterPriority || filterStatus || filterModule !== "all") && (
             <button
               onClick={() => {
                 setSearchQuery("");
                 setFilterAssignee("");
                 setFilterPriority("");
                 setFilterStatus("");
+                setFilterModule("all");
               }}
               className="text-indigo-600 hover:text-indigo-800 font-black flex items-center space-x-0.5 cursor-pointer ml-1"
             >
@@ -731,6 +879,44 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
           </button>
         </div>
       </div>
+
+      {/* Baseline vs actual summary */}
+      {bSummary && showBaseline && (
+        <div
+          id="gantt-baseline-summary"
+          className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 shrink-0 text-[11px] bg-slate-50 dark:bg-[#0F1115] border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300"
+        >
+          <span className="font-black uppercase tracking-wider text-[10px] text-slate-500 dark:text-slate-400">
+            Baseline {bSummary.setAt ? `· ${bSummary.setAt}` : ""}
+          </span>
+          <span>
+            <b className="text-slate-900 dark:text-white">{bSummary.late}</b> late · <b className="text-slate-900 dark:text-white">{bSummary.onPlan}</b> on plan ·{" "}
+            <b className="text-slate-900 dark:text-white">{bSummary.early}</b> early
+            <span className="text-slate-400"> of {bSummary.baselined}</span>
+          </span>
+          <span>
+            Average slip <b className="text-slate-900 dark:text-white">{bSummary.avgSlip > 0 ? "+" : ""}{bSummary.avgSlip}d</b>
+          </span>
+          {bSummary.baselineFinish && bSummary.currentFinish && (
+            <span>
+              Finish {bSummary.baselineFinish} → <b className="text-slate-900 dark:text-white">{bSummary.currentFinish}</b>{" "}
+              <span className={`ml-0.5 px-1.5 py-px rounded border text-[10px] font-bold ${slipClass(bSummary.finishSlip)}`}>{fmtSlip(bSummary.finishSlip)}</span>
+            </span>
+          )}
+          {bSummary.worst && (
+            <button
+              onClick={() => onOpenTaskModal(bSummary.worst!.task)}
+              className="truncate max-w-[16rem] text-left hover:underline"
+              title="Open the task that slipped most"
+            >
+              Most slipped: <b className="text-slate-900 dark:text-white">{bSummary.worst.task.title}</b> ({fmtSlip(bSummary.worst.slip)})
+            </button>
+          )}
+          {bSummary.unbaselined > 0 && (
+            <span className="text-slate-400">{bSummary.unbaselined} new since baseline</span>
+          )}
+        </div>
+      )}
 
       {/* Main Gantt Spreadsheet-Timeline Matrix Splitter Board */}
       <div id="gantt-board-canvas" className="flex-1 flex overflow-hidden">
@@ -831,6 +1017,18 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                   >
                     {task.title}
                   </button>
+                  {showBaseline && (() => {
+                    const v = varianceById.get(task.id);
+                    if (!v || v.finishSlip === 0) return null;
+                    return (
+                      <span
+                        className={`shrink-0 px-1 py-px rounded border text-[9px] font-bold font-mono ${slipClass(v.finishSlip)}`}
+                        title={`${v.actual ? "Finished" : "Finish now planned"} ${v.finish}; baseline ${task.baseline!.due}`}
+                      >
+                        {fmtSlip(v.finishSlip)}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Assigned column (round avatars directly like the image) */}
@@ -1026,6 +1224,23 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                       })}
                     </div>
 
+                    {/* Baseline ghost bar (the plan as saved) */}
+                    {showBaseline && task.baseline && (() => {
+                      const bp = getGridPlot(task.baseline.start, task.baseline.due);
+                      if (!bp.isVisible) return null;
+                      return (
+                        <div
+                          className="gantt-baseline-bar absolute h-1.5 rounded-sm bg-slate-400/70 dark:bg-slate-500/70 z-[5] pointer-events-auto"
+                          style={{
+                            left: `${bp.start * columnsData.columnWidth + 4}px`,
+                            width: `${Math.max(6, bp.span * columnsData.columnWidth - 8)}px`,
+                            top: "38px",
+                          }}
+                          title={`Baseline: ${task.baseline.start} → ${task.baseline.due}`}
+                        />
+                      );
+                    })()}
+
                     {/* Interactive Slider Bar */}
                     {isVisible && (
                       <div
@@ -1129,6 +1344,15 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
                               <span className={`text-[10px] font-semibold ${"text-slate-500 dark:text-slate-400"}`}>
                                 | {task.title}
                               </span>
+                              {showBaseline && (() => {
+                                const v = varianceById.get(task.id);
+                                if (!v || v.finishSlip === 0) return null;
+                                return (
+                                  <span className={`px-1 py-px rounded border text-[9px] font-bold font-mono ${slipClass(v.finishSlip)}`}>
+                                    {v.actual ? "finished " : ""}{fmtSlip(v.finishSlip)}
+                                  </span>
+                                );
+                              })()}
                             </div>
 
                             {/* Hover helpers */}
@@ -1201,6 +1425,12 @@ export default function TimelineView({ project, onOpenTaskModal, onUpdateProject
             <span className="border-b border-indigo-500 w-6 h-px shrink-0" />
             <span>Dependency line</span>
           </div>
+          {bSummary && showBaseline && (
+            <div className="flex items-center space-x-1.5">
+              <span className="w-6 h-1.5 rounded-sm bg-slate-400/70 shrink-0" />
+              <span>Baseline (saved plan) · +Nd = finishing later than planned</span>
+            </div>
+          )}
           <div className="flex items-center space-x-1.5 text-rose-500 font-bold">
             <span className="border-b border-dashed border-rose-500 w-6 h-px shrink-0" />
             <AlertTriangle className="w-3 h-3 text-rose-500" />

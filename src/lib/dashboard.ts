@@ -1,4 +1,5 @@
 import { BoardColumn, Project, Task } from "../types";
+import { moduleIdOf } from "./modules";
 import { isCompletionColumn } from "./recurrence";
 import { isDeadlineMissed } from "./scheduling";
 import { sameName } from "./identity";
@@ -474,7 +475,7 @@ export function moduleStats(project: Project, rows: Row[]): ModuleStat[] {
   if (mods.length === 0) return [];
   return mods
     .map((m) => {
-      const mine = rows.filter((r) => r.project.id === project.id && r.task.moduleId === m.id);
+      const mine = rows.filter((r) => r.project.id === project.id && moduleIdOf(r.task, mods) === m.id);
       return { id: m.id, name: m.name, total: mine.length, done: mine.filter((r) => r.done).length };
     })
     .filter((m) => m.total > 0);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import DateInput from "./DateInput";
 import TimerButton from "./TimerButton";
-import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency } from "../types";
+import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency, ProjectModule } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
 import { isDoneColumn } from "../lib/dashboard";
@@ -23,6 +23,7 @@ import {
   Flag,
   Repeat,
   Bell,
+  Boxes,
 } from "lucide-react";
 
 interface TaskModalProps {
@@ -33,6 +34,7 @@ interface TaskModalProps {
   projectTags: string[];
   projectMembers: string[];
   allTasks?: Task[]; // existing tasks for dependency linkage
+  projectModules?: ProjectModule[]; // the space's modules (Modules & Goals tab)
   checklistTemplates?: ChecklistTemplate[];
   onSaveTemplate?: (name: string, items: string[]) => void;
   onDeleteTemplate?: (id: string) => void;
@@ -55,6 +57,7 @@ export default function TaskModal({
   projectTags,
   projectMembers,
   allTasks = [],
+  projectModules = [],
   checklistTemplates = [],
   onSaveTemplate,
   onDeleteTemplate,
@@ -81,6 +84,7 @@ export default function TaskModal({
   const [actualHours, setActualHours] = useState(0);
   const [completedAt, setCompletedAt] = useState(""); // day the task was finished (done columns only)
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [moduleChoice, setModuleChoice] = useState(""); // "" = no explicit module
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [checklist, setChecklist] = useState<SubTask[]>([]);
   const [comments, setComments] = useState<{ id: string; author: string; text: string; date: string }[]>([]);
@@ -123,6 +127,7 @@ export default function TaskModal({
       baseHoursRef.current = task.actualHours || 0;
       setCompletedAt(task.completedAt || "");
       setSelectedTags(task.tags || []);
+      setModuleChoice(task.moduleId && projectModules.some((m) => m.id === task.moduleId) ? task.moduleId : "");
       setSubtasks(task.subtasks || []);
       setChecklist(task.checklist || []);
       setComments(task.comments || []);
@@ -141,11 +146,12 @@ export default function TaskModal({
       setStatus(defaultColumnId || columns[0]?.id || "");
       setPriority("medium");
       setAssignee("Unassigned");
-      setStartDate(defaultDates?.startDate || new Date().toISOString().split("T")[0]);
-      setDueDate(defaultDates?.dueDate || new Date(Date.now() + 86400000 * 3).toISOString().split("T")[0]); // 3 days in future
+      setStartDate(defaultDates?.startDate || localToday());
+      setDueDate(defaultDates?.dueDate || localToday(new Date(Date.now() + 86400000 * 3))); // 3 days in future
       setEstimatedHours(8);
       setActualHours(0);
       setSelectedTags([]);
+      setModuleChoice("");
       setSubtasks([]);
       setChecklist([]);
       setComments([]);
@@ -189,6 +195,7 @@ export default function TaskModal({
       ...(task ? { actualHoursBase: baseHoursRef.current } : {}),
       completedAt: isDoneColumn(columns.find((c) => c.id === status)) && completedAt ? completedAt : undefined,
       tags: selectedTags,
+      ...(projectModules.length > 0 || task?.moduleId ? { moduleId: moduleChoice || undefined } : {}),
       subtasks,
       checklist,
       comments,
@@ -737,6 +744,34 @@ export default function TaskModal({
                 ))}
               </select>
             </div>
+
+            {/* Module (from the Modules & Goals tab) */}
+            {projectModules.length > 0 && (() => {
+              const byTag = !moduleChoice
+                ? projectModules.find((m) => selectedTags.map((t) => t.toLowerCase()).includes(m.name.toLowerCase()))
+                : undefined;
+              return (
+                <div>
+                  <label htmlFor="task-module-select" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center space-x-1">
+                    <Boxes className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                    <span>Module</span>
+                  </label>
+                  <select
+                    id="task-module-select"
+                    value={moduleChoice}
+                    onChange={(e) => setModuleChoice(e.target.value)}
+                    className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  >
+                    <option value="">{byTag ? `By tag: ${byTag.name}` : "No module"}</option>
+                    {projectModules.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.icon ? `${m.icon} ` : ""}{m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
 
             {/* Notify me (watch this task's dates) */}
             {(() => {

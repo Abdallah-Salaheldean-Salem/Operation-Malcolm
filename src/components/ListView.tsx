@@ -2,6 +2,10 @@ import React, { useState, useRef } from "react";
 import { Project, Task } from "../types";
 import { mergeImport } from "../lib/importTasks";
 import { buildImportGuide } from "../lib/importTemplate";
+import { matchesModule, moduleOfTask } from "../lib/modules";
+import { variance } from "../lib/baseline";
+import { localToday } from "../lib/notifications";
+import ModuleChip from "./ModuleChip";
 import CommentsView, { commentTime, formatCommentDate } from "./CommentsView";
 import { Search, Plus, Trash2, Edit2, ChevronDown, ChevronRight, Calendar, Flag, MessageSquare, LayoutList, MoreHorizontal, Download, Upload, FileText } from "lucide-react";
 
@@ -13,6 +17,7 @@ interface ListViewProps {
   globalPriority?: string;
   globalAssignee?: string;
   globalStatus?: string;
+  globalModule?: string;
 }
 
 export default function ListView({
@@ -23,6 +28,7 @@ export default function ListView({
   globalPriority,
   globalAssignee,
   globalStatus,
+  globalModule,
 }: ListViewProps) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   // Sub-tabs: the task table, or every comment on the tasks in one place.
@@ -72,7 +78,7 @@ export default function ListView({
     const matchesPriority = activePriority === "all" || task.priority === activePriority;
     const matchesAssignee = activeAssignee === "all" || task.assignee === activeAssignee;
     const matchesStatus = activeStatus === "all" || task.status === activeStatus;
-    return matchesSearch && matchesPriority && matchesAssignee && matchesStatus;
+    return matchesSearch && matchesPriority && matchesAssignee && matchesStatus && matchesModule(task, project.modules, globalModule);
   });
 
   // Import tasks from a JSON file (merge; ids already in the space are skipped).
@@ -145,9 +151,13 @@ export default function ListView({
         return;
       }
       const done = (arr?: { completed: boolean }[]) => (arr || []).filter((s) => s.completed).length;
+      const hasModules = (project.modules || []).length > 0;
+      const hasBaseline = project.tasks.some((t) => t.baseline);
+      const todayStr = localToday();
       const rows = filteredTasks.map((t) => ({
         Status: colTitle(t.status),
         Name: t.title,
+        ...(hasModules ? { Module: moduleOfTask(t, project.modules)?.name || "" } : {}),
         Assignee: t.assignee || "Unassigned",
         Priority: t.priority,
         "Start Date": t.startDate || "",
@@ -160,11 +170,19 @@ export default function ListView({
         Checklist: `${done(t.checklist)}/${(t.checklist || []).length}`,
         Subtasks: `${done(t.subtasks)}/${(t.subtasks || []).length}`,
         Tags: (t.tags || []).join(", "),
+        ...(hasBaseline
+          ? {
+              "Baseline Start": t.baseline?.start || "",
+              "Baseline End": t.baseline?.due || "",
+              "Finish Slip (days)": t.baseline ? variance(t, project, todayStr)?.finishSlip ?? "" : "",
+            }
+          : {}),
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
       ws["!cols"] = [
-        { wch: 14 }, { wch: 40 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 14 }, { wch: 40 }, ...(hasModules ? [{ wch: 18 }] : []), { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
         { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 24 },
+        ...(hasBaseline ? [{ wch: 14 }, { wch: 14 }, { wch: 16 }] : []),
       ];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Tasks");
@@ -333,6 +351,7 @@ export default function ListView({
                             {task.isMilestone ? "◆ " : ""}{task.title}
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            <ModuleChip module={moduleOfTask(task, project.modules)} />
                             <span className={`inline-flex items-center gap-1 px-1.5 py-px rounded font-bold uppercase text-[9px] tracking-wider ${getPriorityColor(task.priority)}`}>
                               <Flag className="w-2.5 h-2.5" />
                               {task.priority}
@@ -405,6 +424,7 @@ export default function ListView({
                               <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-indigo-500 transition-colors truncate">
                                 {task.title}
                               </span>
+                              <ModuleChip module={moduleOfTask(task, project.modules)} className="ml-2" />
                             </div>
                           </td>
                           <td className="py-1.5 px-3 border-r border-slate-200 dark:border-slate-800 cursor-pointer" onClick={() => onOpenTaskModal(task)}>

@@ -70,6 +70,13 @@ export interface Task {
   muted?: string[];        // assignees who unticked the automatic "Notify me"
   timers?: Record<string, string>; // running timers: member name key → ISO start time
   completedAt?: string;    // YYYY-MM-DD the task was finished (set when it enters a done column)
+  baseline?: TaskBaseline; // frozen planned dates for baseline-vs-actual on the Gantt
+}
+
+export interface TaskBaseline {
+  start: string; // YYYY-MM-DD planned start when the baseline was saved
+  due: string;   // YYYY-MM-DD planned finish when the baseline was saved
+  setAt: string; // YYYY-MM-DD the baseline was saved
 }
 
 // Hardware/engineering readiness lifecycle for a module (subsystem)

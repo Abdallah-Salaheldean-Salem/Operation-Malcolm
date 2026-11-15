@@ -27,8 +27,10 @@ export function spawnNextOccurrence(task: Task, columns: BoardColumn[]): Task | 
   const firstCol = columns[0]?.id || task.status;
   const adv = (dt?: string) => (dt ? advanceDate(dt, rec.frequency, rec.interval) : dt || "");
   const now = Date.now();
+  // The new occurrence is unfinished, untimed and outside any saved baseline.
+  const { completedAt: _c, timers: _t, baseline: _b, ...rest } = task;
   return {
-    ...task,
+    ...rest,
     id: `task-${now}-${Math.floor(Math.random() * 1000)}`,
     status: firstCol,
     progress: 0,

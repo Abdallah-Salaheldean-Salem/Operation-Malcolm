@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Project, Task, BoardColumn, TaskPriority } from "../types";
 import { PRIORITIES } from "../data";
+import { matchesModule, moduleOfTask } from "../lib/modules";
+import ModuleChip from "./ModuleChip";
 import { checkDoneGate } from "../lib/checklist";
 import { isDeadlineMissed } from "../lib/scheduling";
 import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
@@ -38,7 +40,8 @@ interface KanbanBoardProps {
   globalPriority?: string;
   globalAssignee?: string;
   globalStatus?: string;
-  onClearFilter?: (field: "search" | "priority" | "assignee" | "status") => void;
+  globalModule?: string;
+  onClearFilter?: (field: "search" | "priority" | "assignee" | "status" | "module") => void;
 }
 
 export default function KanbanBoard({
@@ -49,6 +52,7 @@ export default function KanbanBoard({
   globalPriority,
   globalAssignee,
   globalStatus,
+  globalModule,
   onClearFilter,
 }: KanbanBoardProps) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -111,7 +115,7 @@ export default function KanbanBoard({
     const matchesPriority = priorityMatches(task, globalPriority) && priorityMatches(task, priorityFilter);
     const matchesAssignee = assigneeMatches(task, globalAssignee) && assigneeMatches(task, assigneeFilter);
     const matchesStatus = globalStatus === undefined || globalStatus === "all" || task.status === globalStatus;
-    return matchesSearch && matchesPriority && matchesAssignee && matchesStatus;
+    return matchesSearch && matchesPriority && matchesAssignee && matchesStatus && matchesModule(task, project.modules, globalModule);
   });
 
   // Helper calculations for high-level pivot dashboard
@@ -326,7 +330,13 @@ export default function KanbanBoard({
     globalStatus && globalStatus !== "all"
       ? { field: "status" as const, label: `Status: ${statusTitle}` }
       : null,
-  ].filter(Boolean) as { field: "search" | "priority" | "assignee" | "status"; label: string }[];
+    globalModule && globalModule !== "all"
+      ? {
+          field: "module" as const,
+          label: `Module: ${(project.modules || []).find((m) => m.id === globalModule)?.name || "none"}`,
+        }
+      : null,
+  ].filter(Boolean) as { field: "search" | "priority" | "assignee" | "status" | "module"; label: string }[];
 
   return (
     <div id="kanban-view-root" className="flex flex-col h-full bg-slate-50 dark:bg-[#0F1115] flex-1">
@@ -943,6 +953,7 @@ export default function KanbanBoard({
                           <h5 className="font-bold text-slate-800 dark:text-slate-200 text-xs group-hover:text-indigo-400 transition-colors line-clamp-1 mb-1">
                             {task.title}
                           </h5>
+                          <ModuleChip module={moduleOfTask(task, project.modules)} className="mb-1.5" />
 
                           {/* Description */}
                           {task.description && (
@@ -1229,6 +1240,7 @@ export default function KanbanBoard({
                           <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                             {task.title}
                           </h4>
+                          <ModuleChip module={moduleOfTask(task, project.modules)} className="mb-1.5" />
 
                           {/* Description */}
                           {(task.description || task.notes) && (
