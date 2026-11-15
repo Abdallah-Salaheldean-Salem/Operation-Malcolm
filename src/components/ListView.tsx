@@ -152,6 +152,7 @@ export default function ListView({
         Priority: t.priority,
         "Start Date": t.startDate || "",
         "End Date": t.dueDate || "",
+        Completed: t.completedAt || "",
         Deadline: t.deadline || "",
         "Logged Hours": t.actualHours || 0,
         "Estimated Hours": t.estimatedHours || 0,
@@ -162,7 +163,7 @@ export default function ListView({
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
       ws["!cols"] = [
-        { wch: 14 }, { wch: 40 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+        { wch: 14 }, { wch: 40 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
         { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 24 },
       ];
       const wb = XLSX.utils.book_new();

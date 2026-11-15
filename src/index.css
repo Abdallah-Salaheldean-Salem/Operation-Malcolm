@@ -203,3 +203,85 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   opacity: 0;
   cursor: pointer;
 }
+
+
+/* ---- Dashboard charts ------------------------------------------------------
+   Colour roles for the dashboard's charts. Light values first; the .dark block
+   re-steps the same hues for the dark card surface. The status trio
+   (done / in progress / blocked) is checked for colour-blind separation. */
+.viz-root {
+  --viz-surface: #ffffff;
+  --viz-ink: #0f172a;
+  --viz-ink-2: #475569;
+  --viz-muted: #64748b;
+  --viz-grid: #e9edf2;
+  --viz-axis: #cbd5e1;
+  --viz-accent: #2a78d6;
+  --viz-accent-soft: #cde2fb;
+  --viz-context: #a3acb9;
+  --viz-done: #1baf7a;
+  --viz-progress: #2a78d6;
+  --viz-blocked: #e34948;
+  --viz-todo: #d5dae1;
+  --viz-todo-ink: #0f172a;
+  --viz-late: #eb6834;
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-critical: #d03b3b;
+  --viz-good-text: #006300;
+  --viz-bad-text: #b42318;
+}
+.dark .viz-root {
+  --viz-surface: #14171c;
+  --viz-ink: #f1f5f9;
+  --viz-ink-2: #cbd5e1;
+  --viz-muted: #94a3b8;
+  --viz-grid: #232830;
+  --viz-axis: #3a414c;
+  --viz-accent: #3987e5;
+  --viz-accent-soft: #1d3554;
+  --viz-context: #667080;
+  --viz-done: #199e70;
+  --viz-progress: #3987e5;
+  --viz-blocked: #e66767;
+  --viz-todo: #3b424d;
+  --viz-todo-ink: #f1f5f9;
+  --viz-late: #d95926;
+  --viz-good: #0ca30c;
+  --viz-warning: #fab219;
+  --viz-critical: #e66767;
+  --viz-good-text: #34c759;
+  --viz-bad-text: #ff8a80;
+}
+.viz-root svg text {
+  font-family: inherit;
+}
+
+/* Presenting / saving the dashboard as a PDF: print only the presentation layer. */
+@media print {
+  body.dash-printing {
+    background: #ffffff !important;
+  }
+  body.dash-printing #root {
+    display: none !important;
+  }
+  body.dash-printing #dash-present-layer {
+    position: static !important;
+    inset: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  body.dash-printing .no-print {
+    display: none !important;
+  }
+  body.dash-printing .viz-card {
+    break-inside: avoid;
+    box-shadow: none !important;
+  }
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+}

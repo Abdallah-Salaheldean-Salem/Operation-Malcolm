@@ -4,6 +4,7 @@ import TimerButton from "./TimerButton";
 import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
+import { isDoneColumn } from "../lib/dashboard";
 import { CONSTRAINT_LABELS, isDeadlineMissed, constraintWarning } from "../lib/scheduling";
 import { isWatching, setWatching, watcherNames, localToday } from "../lib/notifications";
 import {
@@ -78,6 +79,7 @@ export default function TaskModal({
   const [dueDate, setDueDate] = useState("");
   const [estimatedHours, setEstimatedHours] = useState(0);
   const [actualHours, setActualHours] = useState(0);
+  const [completedAt, setCompletedAt] = useState(""); // day the task was finished (done columns only)
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [subtasks, setSubtasks] = useState<SubTask[]>([]);
   const [checklist, setChecklist] = useState<SubTask[]>([]);
@@ -119,6 +121,7 @@ export default function TaskModal({
       setEstimatedHours(task.estimatedHours || 0);
       setActualHours(task.actualHours || 0);
       baseHoursRef.current = task.actualHours || 0;
+      setCompletedAt(task.completedAt || "");
       setSelectedTags(task.tags || []);
       setSubtasks(task.subtasks || []);
       setChecklist(task.checklist || []);
@@ -184,6 +187,7 @@ export default function TaskModal({
       estimatedHours: Number(estimatedHours),
       actualHours: Number(actualHours),
       ...(task ? { actualHoursBase: baseHoursRef.current } : {}),
+      completedAt: isDoneColumn(columns.find((c) => c.id === status)) && completedAt ? completedAt : undefined,
       tags: selectedTags,
       subtasks,
       checklist,
@@ -674,7 +678,11 @@ export default function TaskModal({
               <select
                 id="task-status-select"
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  // Moving into a done column: suggest today as the finish date.
+                  if (isDoneColumn(columns.find((c) => c.id === e.target.value)) && !completedAt) setCompletedAt(localToday());
+                }}
                 className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
               >
                 {columns.map((col) => (
@@ -688,6 +696,25 @@ export default function TaskModal({
                   <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
                   <span>{statusError}</span>
                 </p>
+              )}
+              {isDoneColumn(columns.find((c) => c.id === status)) && (
+                <div className="mt-2">
+                  <label htmlFor="task-completed-at" className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1">
+                    Completed on
+                  </label>
+                  <DateInput
+                    id="task-completed-at"
+                    value={completedAt}
+                    max={localToday()}
+                    onChange={(e) => setCompletedAt(e.target.value)}
+                    className="w-full bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  />
+                  {!completedAt && (
+                    <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
+                      Not recorded — the dashboard counts it on its due date.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
 

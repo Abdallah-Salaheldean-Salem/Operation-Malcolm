@@ -22,6 +22,8 @@ import { PushState, getPushState, enablePush, disablePush, sendTestPush, resyncP
 import { myRunningTimers, startTimerFor, stopTimersFor, formatHours } from "./lib/timer";
 import { appendDailyLog } from "./lib/dailyLogs";
 import TimerButton from "./components/TimerButton";
+import DashboardView from "./components/DashboardView";
+import { stampCompletion } from "./lib/dashboard";
 import {
   RemoteNotification,
   fetchNotifications,
@@ -59,6 +61,7 @@ import {
 } from "./lib/access";
 import {
   LayoutGrid, 
+  LayoutDashboard,
   Undo2, 
   Redo2, 
   Copy, 
@@ -638,7 +641,9 @@ export default function App() {
   const handleUpdateProject = (updatedProj: Project) => {
     setUndoStack((prev) => [...prev, projects]);
     setRedoStack([]);
-    setProjects(projects.map((p) => (p.id === updatedProj.id ? updatedProj : p)));
+    // Record the day a task is finished (and clear it if the task is reopened).
+    const stamped = stampCompletion(projects.find((p) => p.id === updatedProj.id), updatedProj, localToday());
+    setProjects(projects.map((p) => (p.id === stamped.id ? stamped : p)));
   };
 
   // Undo Handler
@@ -1099,6 +1104,7 @@ export default function App() {
 
   // Tab configurations
   const tabItems = [
+    { value: "dashboard" as AppView, label: "Dashboard", icon: "🧭" },
     { value: "activity" as AppView, label: "Daily Logs", icon: "☕" },
     { value: "board" as AppView, label: "Board View", icon: "📊" },
     { value: "list" as AppView, label: "Spreadsheet", icon: "📋" },
@@ -1114,6 +1120,7 @@ export default function App() {
   // desktop-oriented (dense, drag-driven) so its slot goes to Daily Logs;
   // Gantt stays reachable from the sidebar.
   const mobileNavItems: { value: AppView; label: string; Icon: any }[] = [
+    { value: "dashboard", label: "Dash", Icon: LayoutDashboard },
     { value: "activity", label: "Logs", Icon: Clock },
     { value: "list", label: "Tasks", Icon: ListTodo },
     { value: "board", label: "Board", Icon: Kanban },
@@ -1434,8 +1441,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. FOUR INLINE METRIC CARDS */}
-          <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
+          {/* 3. FOUR INLINE METRIC CARDS (the Dashboard tab shows its own figures) */}
+          <div className={`${activeView === "dashboard" ? "hidden" : "hidden md:grid"} grid-cols-2 lg:grid-cols-4 gap-3 mt-5`}>
             
             {/* Card 1: Sprint Velocity */}
             <div className="bg-white dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-xl p-4 flex items-center justify-between shadow-sm">
@@ -1547,8 +1554,8 @@ export default function App() {
             </button>
           </div>
 
-          {/* Unified Global Filters row */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          {/* Unified Global Filters row (the Dashboard has its own filters) */}
+          <div className={`${activeView === "dashboard" ? "hidden" : "flex"} flex-wrap items-center gap-2.5`}>
             
             {/* Search Input */}
             <div className="relative">
@@ -1647,6 +1654,19 @@ export default function App() {
             </div>
           ) : (
           <>
+          {activeView === "dashboard" && (
+            <DashboardView
+              projects={visibleProjects.filter((p) => canAccess(p.id, access, spaceSecurity))}
+              activeProject={activeProject}
+              me={me}
+              onUpdateProject={handleUpdateProject}
+              onOpenTask={(projectId, task) => {
+                if (projectId !== activeProjectId) doSelectProject(projectId);
+                handleOpenTaskModal(task);
+              }}
+            />
+          )}
+
           {activeView === "list" && (
             <ListView
               project={activeProject}

@@ -188,6 +188,7 @@ export function buildImportGuide(project: Project, appName: string): string {
     ["startDate", "YYYY-MM-DD", "no", "When work starts (default: dueDate, else today)"],
     ["dueDate", "YYYY-MM-DD", "no", "When it should end (default: startDate)"],
     ["deadline", "YYYY-MM-DD", "no", "Hard deadline; the task shows a **Late** flag if dueDate is after it"],
+    ["completedAt", "YYYY-MM-DD", "no", "The day the task was finished (only for tasks in a done column); the Dashboard uses it for progress and weekly output"],
     ["estimatedHours", "number", "no", "Planned hours"],
     ["actualHours", "number", "no", "Hours already logged"],
     ["progress", "number 0–100", "no", "Completion percentage"],

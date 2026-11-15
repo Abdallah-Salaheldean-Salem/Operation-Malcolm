@@ -69,6 +69,7 @@ export interface Task {
   watchers?: string[];     // member names who ticked "Notify me" on this task
   muted?: string[];        // assignees who unticked the automatic "Notify me"
   timers?: Record<string, string>; // running timers: member name key → ISO start time
+  completedAt?: string;    // YYYY-MM-DD the task was finished (set when it enters a done column)
 }
 
 // Hardware/engineering readiness lifecycle for a module (subsystem)
@@ -179,4 +180,4 @@ export interface GeneratedReport {
   createdAt: string;
 }
 
-export type AppView = "list" | "board" | "team" | "gantt" | "ideas" | "activity" | "settings" | "calendar" | "modules";
+export type AppView = "dashboard" | "list" | "board" | "team" | "gantt" | "ideas" | "activity" | "settings" | "calendar" | "modules";

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Project, AppView } from "../types";
 import {
   Kanban,
+  LayoutDashboard,
   ListTodo,
   Calendar,
   CalendarDays,
@@ -123,6 +124,7 @@ export default function Sidebar({
   };
 
   const viewItems: { id: AppView; label: string; icon: any; badge?: string }[] = [
+    { id: "dashboard", label: "0. Dashboard", icon: LayoutDashboard },
     { id: "list", label: "1. List View", icon: ListTodo },
     { id: "board", label: "2. Board View", icon: Kanban },
     { id: "calendar", label: "3. Calendar Grid", icon: CalendarDays },

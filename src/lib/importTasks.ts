@@ -64,6 +64,7 @@ export function normalizeTask(raw: unknown, project: Project, index: number, sta
     createdAt: isDate(r.createdAt) ? r.createdAt : today,
   };
   if (isDate(r.deadline)) task.deadline = r.deadline;
+  if (isDate(r.completedAt)) task.completedAt = r.completedAt;
   if (CONSTRAINTS.includes(r.constraintType)) task.constraintType = r.constraintType;
   if (isDate(r.constraintDate)) task.constraintDate = r.constraintDate;
   if (r.isMilestone === true) task.isMilestone = true;

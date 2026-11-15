@@ -8,6 +8,7 @@ import { isDeadlineMissed, CONSTRAINT_LABELS } from "../lib/scheduling";
 import { spawnNextOccurrence, shouldSpawnOnMove } from "../lib/recurrence";
 import { localToday } from "../lib/notifications";
 import { DailyLog, LOGS_STORAGE_KEY, LOGS_APPEND_EVENT } from "../lib/dailyLogs";
+import { isDoneColumn } from "../lib/dashboard";
 import { Clock, Check, Plus, Trash2, Edit2, Coffee, Calendar, User, Tag, HelpCircle, ChevronRight, Mic, Flag, Repeat, Bookmark, ChevronDown, AlertTriangle, CheckSquare } from "lucide-react";
 
 interface ActivityViewProps {
@@ -373,8 +374,12 @@ export default function ActivityView({ project, onUpdateProject, checklistTempla
       const updatedTasks = project.tasks.map(t => {
         if (t.id === finalTaskId) {
           const day = targetDate || localToday();
+          const colOf = (id: string) => project.columns.find((c) => c.id === id);
+          // A log that finishes the task records the log's day as its finish date.
+          const finishes = isDoneColumn(colOf(logStatus)) && !isDoneColumn(colOf(t.status));
           return {
             ...t,
+            ...(finishes ? { completedAt: day <= localToday() ? day : localToday() } : {}),
             title: finalTaskTitle,
             description: additionalNotes || t.description,
             status: logStatus,
