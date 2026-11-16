@@ -58,7 +58,19 @@ import { fetchAppState } from "../lib/supabase-sync";
 import { weekBounds, weekLabel, weeklyReport, weeklyText } from "../lib/weekly";
 import { GOAL_STATE_LABEL, goalStatus } from "../lib/modules";
 import { baselineSummary, fmtSlip, variance } from "../lib/baseline";
-import { buildInfographicData, buildInfographicHtml, infographicFileName } from "../lib/infographic";
+import { buildInfographicData, buildInfographicHtml, infographicFileName, INFO_SECTIONS, InfoSection } from "../lib/infographic";
+
+// Sections left out of the infographic, remembered per device. Stored as the
+// excluded ones, so any section added later is included by default.
+const INFO_EXCLUDED_KEY = "infographic_excluded_v1";
+const loadExcluded = (): InfoSection[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(INFO_EXCLUDED_KEY) || "[]");
+    return Array.isArray(v) ? v.filter((k) => INFO_SECTIONS.some((s) => s.key === k)) : [];
+  } catch {
+    return [];
+  }
+};
 import { ChartCard, LoadHeatmap, MeterList, ProgressChart, SegmentedBar, StatTile, TableData, WeekColumns } from "./dashboard/charts";
 
 interface DashboardViewProps {
@@ -348,7 +360,54 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
   };
 
   // ---- interactive infographic (standalone HTML file) -------------------------
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoExcluded, setInfoExcluded] = useState<InfoSection[]>(loadExcluded);
+  // Only offer sections this export can actually show.
+  const infoAvailable = INFO_SECTIONS.filter((s) => {
+    if (s.key === "modules") return allRows.some((r) => r.task.moduleId || (r.project.modules || []).length);
+    if (s.key === "goals") return goals.length > 0;
+    if (s.key === "baseline") return effScope === "space" && allRows.some((r) => r.task.baseline);
+    if (s.key === "notes") return mode === "weekly" && !!notes.trim();
+    return true;
+  });
+  const infoChosen = infoAvailable.filter((s) => !infoExcluded.includes(s.key)).map((s) => s.key);
+  const setInfoSection = (key: InfoSection, include: boolean) => {
+    setInfoExcluded((prev) => {
+      const next = include ? prev.filter((k) => k !== key) : Array.from(new Set([...prev, key]));
+      try {
+        localStorage.setItem(INFO_EXCLUDED_KEY, JSON.stringify(next));
+      } catch {
+        /* storage blocked: the choice lasts for this visit */
+      }
+      return next;
+    });
+  };
+  const setAllInfoSections = (include: boolean) => {
+    const next = include ? infoExcluded.filter((k) => !infoAvailable.some((s) => s.key === k)) : Array.from(new Set([...infoExcluded, ...infoAvailable.map((s) => s.key)]));
+    setInfoExcluded(next);
+    try {
+      localStorage.setItem(INFO_EXCLUDED_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+  useEffect(() => {
+    if (!infoOpen) return;
+    const close = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest?.("[data-info-picker]")) setInfoOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setInfoOpen(false);
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [infoOpen]);
+
   const exportInfographic = () => {
+    if (infoChosen.length === 0) return;
+    setInfoOpen(false);
     try {
       const data = buildInfographicData({
         app: (typeof document !== "undefined" && document.title) || "Task tracker",
@@ -362,6 +421,7 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
         goals,
         baseline: effScope === "space" ? baselineSummary({ ...activeProject, tasks: allRows.map((r) => r.task) }, today) : null,
         notes: mode === "weekly" ? notes : "",
+        sections: infoChosen,
       });
       const html = buildInfographicHtml(data);
       const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
@@ -1278,15 +1338,70 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
             >
               <Presentation className="w-3.5 h-3.5" /> Present
             </button>
-            <button
-              type="button"
-              id="dash-infographic"
-              onClick={exportInfographic}
-              title="Download an interactive infographic (.html) that opens in any browser"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]"
-            >
-              <Sparkles className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Infographic</span><span className="sm:hidden">HTML</span>
-            </button>
+            <div className="relative" data-info-picker>
+              <button
+                type="button"
+                id="dash-infographic"
+                onClick={() => setInfoOpen((o) => !o)}
+                aria-expanded={infoOpen}
+                aria-controls="dash-info-picker"
+                title="Download an interactive infographic (.html) that opens in any browser"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Infographic</span><span className="sm:hidden">HTML</span>
+              </button>
+              {infoOpen && (
+                <div
+                  id="dash-info-picker"
+                  role="dialog"
+                  aria-label="Choose what goes in the infographic"
+                  className="fixed z-[60] left-3 right-3 bottom-[76px] sm:absolute sm:left-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-1.5 sm:w-[34rem] max-h-[70vh] overflow-y-auto rounded-xl border border-slate-200 dark:border-[#262B35] bg-white dark:bg-[#17191E] shadow-2xl p-3"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">Include in the infographic</span>
+                    <button type="button" onClick={() => setAllInfoSections(true)} className="ml-auto text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                      All
+                    </button>
+                    <button type="button" onClick={() => setAllInfoSections(false)} className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline">
+                      None
+                    </button>
+                  </div>
+                  <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-0.5">
+                    {infoAvailable.map((s) => (
+                      <li key={s.key}>
+                        <label className="flex items-start gap-2.5 px-1.5 py-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-[#1C2027] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            data-section={s.key}
+                            checked={!infoExcluded.includes(s.key)}
+                            onChange={(e) => setInfoSection(s.key, e.target.checked)}
+                            className="mt-0.5 w-4 h-4 rounded accent-indigo-600"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-semibold text-slate-800 dark:text-slate-100">{s.label}</span>
+                            <span className="block text-[10px] text-slate-500 dark:text-slate-400">{s.hint}</span>
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-[#262B35]">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {infoChosen.length} of {infoAvailable.length} sections
+                    </span>
+                    <button
+                      type="button"
+                      id="dash-info-download"
+                      onClick={exportInfographic}
+                      disabled={infoChosen.length === 0}
+                      className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <FileDown className="w-3.5 h-3.5" /> Download
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               id="dash-pdf"

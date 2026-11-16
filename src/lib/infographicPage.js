@@ -46,6 +46,8 @@
   function pct(a, b) { return b ? Math.round((a / b) * 100) : 0; }
   function r1(n) { return Math.round(n * 10) / 10; }
   function uniq(list) { var seen = {}; return list.filter(function (x) { if (x == null || seen[x]) return false; seen[x] = 1; return true; }); }
+  // Sections chosen when the file was exported (older files: everything).
+  function on(key) { return !D.sections || D.sections.indexOf(key) >= 0; }
   function period() { return PERIODS.filter(function (p) { return p.key === state.period; })[0]; }
   function sameName(a, b) { return (a || "").trim().toLowerCase() === (b || "").trim().toLowerCase(); }
 
@@ -146,9 +148,9 @@
   }
   function listCard(title, desc, items, render, empty, limit) {
     limit = limit || 8;
-    return '<section class="card span-4">' + cardHead("", title, desc, false) +
+    return cardHead("", title, desc, false) +
       (items.length ? '<ul class="list">' + items.slice(0, limit).map(render).join("") + "</ul>" : '<p class="empty">' + esc(empty) + "</p>") +
-      (items.length > limit ? '<p class="more">+ ' + (items.length - limit) + " more in the task table below</p>" : "") + "</section>";
+      (items.length > limit ? '<p class="more">+ ' + (items.length - limit) + " more" + (on("tasks") ? " in the task table below" : "") + "</p>" : "");
   }
   function dueChip(t) {
     if (!t.d) return ["No date", ""];
@@ -323,112 +325,150 @@
     html += '<span class="count">' + plural(total, "task") + (filtersOn ? " of " + ALL.length : "") + "</span></div>";
 
     // health
-    html += '<div class="health"><span class="pill"><span class="dot" style="background:' + hColor + '"></span>' + hIcon + " " + esc(H.label) + '</span><span class="why">' + esc(H.reason) + "</span>" +
-      '<span class="note">Schedule health is worked out from the due dates</span></div>';
+    if (on("health")) {
+      html += '<div class="health"><span class="pill"><span class="dot" style="background:' + hColor + '"></span>' + hIcon + " " + esc(H.label) + '</span><span class="why">' + esc(H.reason) + "</span>" +
+        '<span class="note">Schedule health is worked out from the due dates</span></div>';
+    }
 
     // tiles
-    var tiles = [
-      { k: "Tasks", v: total, s: plural(open.length, "open task") },
-      { k: "Complete", v: pct(done, total) + "%", s: done + " of " + total + " done" },
-      { k: "Finished", v: finished.length, s: P.label.toLowerCase() },
-      { k: "In progress", v: by.progress, s: nBlocked ? nBlocked + " blocked or waiting" : "none blocked" },
-      { k: "Late", v: late.length, s: late.length ? "oldest due " + fmt(late[0].d) : "nothing overdue" },
-      { k: "Hours logged", v: r1(hours), s: "all time, on these tasks" },
-    ];
-    html += '<div class="tiles">' + tiles.map(function (t) { return '<div class="tile"><div class="k">' + esc(t.k) + '</div><div class="v">' + esc(t.v) + '</div><div class="s">' + esc(t.s) + "</div></div>"; }).join("") + "</div>";
+    if (on("tiles")) {
+      var tiles = [
+        { k: "Tasks", v: total, s: plural(open.length, "open task") },
+        { k: "Complete", v: pct(done, total) + "%", s: done + " of " + total + " done" },
+        { k: "Finished", v: finished.length, s: P.label.toLowerCase() },
+        { k: "In progress", v: by.progress, s: nBlocked ? nBlocked + " blocked or waiting" : "none blocked" },
+        { k: "Late", v: late.length, s: late.length ? "oldest due " + fmt(late[0].d) : "nothing overdue" },
+        { k: "Hours logged", v: r1(hours), s: "all time, on these tasks" },
+      ];
+      html += '<div class="tiles">' + tiles.map(function (t) { return '<div class="tile"><div class="k">' + esc(t.k) + '</div><div class="v">' + esc(t.v) + '</div><div class="s">' + esc(t.s) + "</div></div>"; }).join("") + "</div>";
+    }
+
+    // Each row lays out whichever of its cards are included; a lone card takes the full width.
+    function row(cards, spans) {
+      var kept = cards.filter(Boolean);
+      return kept.map(function (c, i) {
+        var span = kept.length === cards.length ? spans[cards.indexOf(c)] : Math.floor(12 / kept.length);
+        return '<section class="card span-' + span + (c.cls ? " " + c.cls : "") + '"' + (c.id ? ' id="' + c.id + '"' : "") + ">" + c.html + "</section>";
+      }).join("");
+    }
 
     html += '<div class="grid">';
-    // where the work stands
-    html += '<section class="card span-5">' + cardHead("cats", "Where the work stands", plural(total, "task") + " by state", true);
-    if (state.tables.cats) {
-      html += table(["State", "Tasks", "Share"], CATS.map(function (c) { return [D.catLabel[c], by[c], pct(by[c], total) + "%"]; }), [0, 1, 1]);
-    } else {
-      html += '<div class="segbar">' + CATS.filter(function (c) { return by[c]; }).map(function (c) {
-        var p = pct(by[c], total);
-        return '<div tabindex="0" style="flex:' + by[c] + ";background:" + CAT_VAR[c] + ";color:" + CAT_INK[c] + '" data-tip="' + esc("<b>" + D.catLabel[c] + "</b><br>" + plural(by[c], "task") + " · " + p + "%") + '">' + (p >= 8 ? p + "%" : "") + "</div>";
-      }).join("") + (total ? "" : '<div style="flex:1;background:var(--grid)"></div>') + "</div>";
-      html += legend(CATS.map(function (c) { return { color: CAT_VAR[c], label: D.catLabel[c], value: by[c] }; }));
-    }
-    // modules (inside same card)
+
+    // where the work stands (+ modules)
     var mods = MODULES.map(function (name) {
       var ts = F.filter(function (t) { return t.m === name; });
       return { name: name, total: ts.length, done: ts.filter(function (t) { return t.c === "done"; }).length, late: ts.filter(isLate).length };
     }).filter(function (m) { return m.total; });
-    if (mods.length) {
-      html += '<h2 style="margin-top:18px;font-size:13px">By module</h2><p class="desc">Click a module to filter</p><ul class="meters">' + mods.map(function (m) {
-        return '<li class="click' + (state.module === m.name ? " on" : "") + '" tabindex="0" data-module="' + esc(m.name) + '"><span class="lab"><b>' + esc(m.name) + "</b><small>" + (m.late ? m.late + " late" : pct(m.done, m.total) + "% done") + '</small></span><span class="track"><span style="width:' + pct(m.done, m.total) + '%;background:var(--accent)"></span></span><span class="fig"><b>' + m.done + "/" + m.total + "</b></span></li>";
-      }).join("") + "</ul>";
+    var stateCard = null;
+    if (on("state") || (on("modules") && mods.length)) {
+      var sc = "";
+      if (on("state")) {
+        sc += cardHead("cats", "Where the work stands", plural(total, "task") + " by state", true);
+        if (state.tables.cats) {
+          sc += table(["State", "Tasks", "Share"], CATS.map(function (c) { return [D.catLabel[c], by[c], pct(by[c], total) + "%"]; }), [0, 1, 1]);
+        } else {
+          sc += '<div class="segbar">' + CATS.filter(function (c) { return by[c]; }).map(function (c) {
+            var p = pct(by[c], total);
+            return '<div tabindex="0" style="flex:' + by[c] + ";background:" + CAT_VAR[c] + ";color:" + CAT_INK[c] + '" data-tip="' + esc("<b>" + D.catLabel[c] + "</b><br>" + plural(by[c], "task") + " · " + p + "%") + '">' + (p >= 8 ? p + "%" : "") + "</div>";
+          }).join("") + (total ? "" : '<div style="flex:1;background:var(--grid)"></div>') + "</div>";
+          sc += legend(CATS.map(function (c) { return { color: CAT_VAR[c], label: D.catLabel[c], value: by[c] }; }));
+        }
+      }
+      if (on("modules") && mods.length) {
+        sc += on("state")
+          ? '<h2 style="margin-top:18px;font-size:13px">By module</h2><p class="desc">Click a module to filter</p>'
+          : cardHead("", "By module", "Tasks finished per module · click a module to filter", false);
+        sc += '<ul class="meters">' + mods.map(function (m) {
+          return '<li class="click' + (state.module === m.name ? " on" : "") + '" tabindex="0" data-module="' + esc(m.name) + '"><span class="lab"><b>' + esc(m.name) + "</b><small>" + (m.late ? m.late + " late" : pct(m.done, m.total) + "% done") + '</small></span><span class="track"><span style="width:' + pct(m.done, m.total) + '%;background:var(--accent)"></span></span><span class="fig"><b>' + m.done + "/" + m.total + "</b></span></li>";
+        }).join("") + "</ul>";
+      }
+      stateCard = { html: sc };
     }
-    html += "</section>";
 
     // progress
-    html += '<section class="card span-7">' + cardHead("prog", "Progress over time", "Tasks finished vs tasks planned to be due by each date", true);
-    if (state.tables.prog) {
-      var PD = progressData(F);
-      html += PD ? table(["Week ending", "Finished", "Planned"], PD.pts.map(function (p) { return [fmtLong(p.day), p.actual == null ? "—" : p.actual, p.planned]; }), [0, 1, 1]) : '<p class="empty">No dated tasks.</p>';
-    } else {
-      html += '<div class="chart" id="c-prog"></div>' + legend([{ color: "var(--accent)", cls: "line", label: "Finished" }, { cls: "dash", label: "Planned (by due date)" }]);
+    var progCard = null;
+    if (on("progress")) {
+      var pc = cardHead("prog", "Progress over time", "Tasks finished vs tasks planned to be due by each date", true);
+      if (state.tables.prog) {
+        var PD = progressData(F);
+        pc += PD ? table(["Week ending", "Finished", "Planned"], PD.pts.map(function (p) { return [fmtLong(p.day), p.actual == null ? "—" : p.actual, p.planned]; }), [0, 1, 1]) : '<p class="empty">No dated tasks.</p>';
+      } else {
+        pc += '<div class="chart" id="c-prog"></div>' + legend([{ color: "var(--accent)", cls: "line", label: "Finished" }, { cls: "dash", label: "Planned (by due date)" }]);
+      }
+      progCard = { html: pc };
     }
-    html += "</section>";
+    html += row([stateCard, progCard], [5, 7]);
 
     // weekly output
-    html += '<section class="card span-7">' + cardHead("weeks", "Weekly output", "Tasks finished each week (weeks start on Sunday) · hover a column for the tasks", true);
-    if (state.tables.weeks) {
-      html += table(["Week of", "Finished", "Tasks"], weeksData(F).map(function (w) { return [fmtLong(w.start) + (w.current ? " (so far)" : ""), w.count, w.tasks.map(function (t) { return t.t; }).join("; ")]; }), [0, 1, 0]);
-    } else {
-      html += '<div class="chart" id="c-weeks"></div>';
+    var weekCard = null;
+    if (on("weekly")) {
+      var wc = cardHead("weeks", "Weekly output", "Tasks finished each week (weeks start on Sunday) · hover a column for the tasks", true);
+      if (state.tables.weeks) {
+        wc += table(["Week of", "Finished", "Tasks"], weeksData(F).map(function (w) { return [fmtLong(w.start) + (w.current ? " (so far)" : ""), w.count, w.tasks.map(function (t) { return t.t; }).join("; ")]; }), [0, 1, 0]);
+      } else {
+        wc += '<div class="chart" id="c-weeks"></div>';
+      }
+      weekCard = { html: wc };
     }
-    html += "</section>";
 
     // people
-    var ppl = uniq(F.map(function (t) { return t.a; })).map(function (name) {
-      var ts = F.filter(function (t) { return t.a === name; });
-      return { name: name, total: ts.length, done: ts.filter(function (t) { return t.c === "done"; }).length, late: ts.filter(isLate).length, open: ts.filter(isOpen).length, hours: ts.reduce(function (s, t) { return s + t.h; }, 0) };
-    }).sort(function (a, b) { return (a.name === "Unassigned") - (b.name === "Unassigned") || b.total - a.total; });
-    html += '<section class="card span-5">' + cardHead("ppl", "By person", "Tasks finished out of those assigned · click a name to filter", true);
-    if (state.tables.ppl) {
-      html += table(["Person", "Done", "Assigned", "Late", "Hours"], ppl.map(function (p) { return [p.name, p.done, p.total, p.late, r1(p.hours)]; }), [0, 1, 1, 1, 1]);
-    } else {
-      html += ppl.length ? '<ul class="meters">' + ppl.map(function (p) {
-        return '<li class="click' + (sameName(state.person, p.name) ? " on" : "") + '" tabindex="0" data-person="' + esc(p.name) + '"><span class="lab"><b>' + esc(p.name) + "</b><small>" + (p.late ? p.late + " late" : p.open ? p.open + " open" : "all done") + '</small></span><span class="track"><span style="width:' + pct(p.done, p.total) + '%;background:var(--accent)"></span></span><span class="fig"><b>' + p.done + "/" + p.total + "</b> · " + r1(p.hours) + "h</span></li>";
-      }).join("") + "</ul>" : '<p class="empty">No tasks.</p>';
+    var pplCard = null;
+    if (on("people")) {
+      var ppl = uniq(F.map(function (t) { return t.a; })).map(function (name) {
+        var ts = F.filter(function (t) { return t.a === name; });
+        return { name: name, total: ts.length, done: ts.filter(function (t) { return t.c === "done"; }).length, late: ts.filter(isLate).length, open: ts.filter(isOpen).length, hours: ts.reduce(function (s, t) { return s + t.h; }, 0) };
+      }).sort(function (a, b) { return (a.name === "Unassigned") - (b.name === "Unassigned") || b.total - a.total; });
+      var ppc = cardHead("ppl", "By person", "Tasks finished out of those assigned · click a name to filter", true);
+      if (state.tables.ppl) {
+        ppc += table(["Person", "Done", "Assigned", "Late", "Hours"], ppl.map(function (p) { return [p.name, p.done, p.total, p.late, r1(p.hours)]; }), [0, 1, 1, 1, 1]);
+      } else {
+        ppc += ppl.length ? '<ul class="meters">' + ppl.map(function (p) {
+          return '<li class="click' + (sameName(state.person, p.name) ? " on" : "") + '" tabindex="0" data-person="' + esc(p.name) + '"><span class="lab"><b>' + esc(p.name) + "</b><small>" + (p.late ? p.late + " late" : p.open ? p.open + " open" : "all done") + '</small></span><span class="track"><span style="width:' + pct(p.done, p.total) + '%;background:var(--accent)"></span></span><span class="fig"><b>' + p.done + "/" + p.total + "</b> · " + r1(p.hours) + "h</span></li>";
+        }).join("") + "</ul>" : '<p class="empty">No tasks.</p>';
+      }
+      pplCard = { html: ppc };
     }
-    html += "</section>";
+    html += row([weekCard, pplCard], [7, 5]);
 
     // goals + baseline
-    if (D.goals.length) {
-      html += '<section class="card span-' + (D.baseline ? 7 : 12) + '">' + cardHead("", "Goals · " + D.goals.filter(function (g) { return g.state === "done"; }).length + "/" + D.goals.length + " achieved", "Progress comes from the tasks in each goal's modules · the dark mark is how much of the time has passed", false);
-      html += D.goals.map(function (g) {
-        var color = g.state === "overdue" ? "var(--late)" : g.state === "at-risk" ? "var(--warning)" : g.state === "done" ? "var(--done)" : "var(--accent)";
-        var when = g.daysLeft != null && g.state !== "done" ? (g.daysLeft < 0 ? -g.daysLeft + " days past " + fmt(g.target) : g.daysLeft === 0 ? "due today" : g.daysLeft + " days left · " + fmt(g.target)) : g.target ? fmt(g.target) : "no target date";
-        return '<div class="goal" tabindex="0" data-tip="' + esc("<b>" + esc(g.title) + "</b><br>" + g.progress + "% done" + (g.expected != null ? " · " + g.expected + "% of the time used" : "") + (g.total ? "<br>" + g.done + " of " + g.total + " tasks" : "")) + '"><div class="row1"><span>' + esc(g.title) + "</span><span>" + g.progress + '%</span></div><div class="track"><span style="width:' + g.progress + "%;background:" + color + '"></span>' +
-          (g.expected != null && g.state !== "done" ? '<em style="left:calc(' + g.expected + '% - 1px)"></em>' : "") + '</div><div class="row3"><b>' + esc(g.stateLabel) + "</b> · " + esc(when) + (g.total ? " · " + g.done + "/" + g.total + " tasks" : "") + (g.modules.length ? " · " + esc(g.modules.join(", ")) : "") + "</div></div>";
-      }).join("") + "</section>";
+    var goalsCard = null;
+    if (on("goals") && D.goals.length) {
+      goalsCard = { html: cardHead("", "Goals · " + D.goals.filter(function (g) { return g.state === "done"; }).length + "/" + D.goals.length + " achieved", "Progress comes from the tasks in each goal's modules · the dark mark is how much of the time has passed", false) +
+        D.goals.map(function (g) {
+          var color = g.state === "overdue" ? "var(--late)" : g.state === "at-risk" ? "var(--warning)" : g.state === "done" ? "var(--done)" : "var(--accent)";
+          var when = g.daysLeft != null && g.state !== "done" ? (g.daysLeft < 0 ? -g.daysLeft + " days past " + fmt(g.target) : g.daysLeft === 0 ? "due today" : g.daysLeft + " days left · " + fmt(g.target)) : g.target ? fmt(g.target) : "no target date";
+          return '<div class="goal" tabindex="0" data-tip="' + esc("<b>" + esc(g.title) + "</b><br>" + g.progress + "% done" + (g.expected != null ? " · " + g.expected + "% of the time used" : "") + (g.total ? "<br>" + g.done + " of " + g.total + " tasks" : "")) + '"><div class="row1"><span>' + esc(g.title) + "</span><span>" + g.progress + '%</span></div><div class="track"><span style="width:' + g.progress + "%;background:" + color + '"></span>' +
+            (g.expected != null && g.state !== "done" ? '<em style="left:calc(' + g.expected + '% - 1px)"></em>' : "") + '</div><div class="row3"><b>' + esc(g.stateLabel) + "</b> · " + esc(when) + (g.total ? " · " + g.done + "/" + g.total + " tasks" : "") + (g.modules.length ? " · " + esc(g.modules.join(", ")) : "") + "</div></div>";
+        }).join("") };
     }
-    if (D.baseline) {
+    var baseCard = null;
+    if (on("baseline") && D.baseline) {
       var withB = F.filter(function (t) { return t.sl != null; });
       var bl = withB.filter(function (t) { return t.sl > 0; }), be = withB.filter(function (t) { return t.sl < 0; });
       var avg = withB.length ? r1(withB.reduce(function (s, t) { return s + t.sl; }, 0) / withB.length) : 0;
-      html += '<section class="card span-' + (D.goals.length ? 5 : 12) + '">' + cardHead("", "Against the baseline", "Plan saved " + (D.baseline.setAt ? fmtLong(D.baseline.setAt) : "") + " vs the plan now · " + plural(withB.length, "task"), false);
-      html += '<div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px">' + [["Later", bl.length], ["On plan", withB.length - bl.length - be.length], ["Earlier", be.length]].map(function (x) { return '<div class="tile"><div class="v">' + x[1] + '</div><div class="k">' + x[0] + "</div></div>"; }).join("") + "</div>";
-      html += '<p class="desc">Average slip <b>' + (avg > 0 ? "+" : "") + avg + " days</b>" + (!filtersOn && D.baseline.baselineFinish ? " · last finish " + fmt(D.baseline.baselineFinish) + " → <b>" + fmt(D.baseline.currentFinish) + "</b>" : "") + "</p>";
+      var bc = cardHead("", "Against the baseline", "Plan saved " + (D.baseline.setAt ? fmtLong(D.baseline.setAt) : "") + " vs the plan now · " + plural(withB.length, "task"), false);
+      bc += '<div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:8px">' + [["Later", bl.length], ["On plan", withB.length - bl.length - be.length], ["Earlier", be.length]].map(function (x) { return '<div class="tile"><div class="v">' + x[1] + '</div><div class="k">' + x[0] + "</div></div>"; }).join("") + "</div>";
+      bc += '<p class="desc">Average slip <b>' + (avg > 0 ? "+" : "") + avg + " days</b>" + (!filtersOn && D.baseline.baselineFinish ? " · last finish " + fmt(D.baseline.baselineFinish) + " → <b>" + fmt(D.baseline.currentFinish) + "</b>" : "") + "</p>";
       var top = bl.filter(isOpen).sort(function (a, b) { return b.sl - a.sl; });
-      html += top.length ? '<ul class="list">' + top.slice(0, 5).map(function (t) { return taskLine(t, "+" + t.sl + "d", "bad"); }).join("") + "</ul>" : '<p class="empty">No open task is finishing later than planned.</p>';
-      html += "</section>";
+      bc += top.length ? '<ul class="list">' + top.slice(0, 5).map(function (t) { return taskLine(t, "+" + t.sl + "d", "bad"); }).join("") + "</ul>" : '<p class="empty">No open task is finishing later than planned.</p>';
+      baseCard = { html: bc };
     }
+    html += row([goalsCard, baseCard], [7, 5]);
 
     // lists
-    html += listCard("Needs attention", "Late or blocked, oldest first", late.concat(blocked), function (t) {
-      var c = isLate(t) ? dueChip(t) : ["Blocked", "warn"];
-      return taskLine(t, c[0], c[1], t.w ? "waiting on " + t.w : "");
-    }, "Nothing is late or blocked.");
-    html += listCard("Coming up", "Due in the next " + horizon + " days", upcoming, function (t) { var c = dueChip(t); return taskLine(t, c[0], c[1]); }, "Nothing due in this window.");
-    html += listCard("Finished", P.label, finished, function (t) { return taskLine(t, fmt(t.dd), ""); }, "Nothing finished in this period.");
+    html += row([
+      on("attention") ? { html: listCard("Needs attention", "Late or blocked, oldest first", late.concat(blocked), function (t) {
+        var c = isLate(t) ? dueChip(t) : ["Blocked", "warn"];
+        return taskLine(t, c[0], c[1], t.w ? "waiting on " + t.w : "");
+      }, "Nothing is late or blocked.") } : null,
+      on("upcoming") ? { html: listCard("Coming up", "Due in the next " + horizon + " days", upcoming, function (t) { var c = dueChip(t); return taskLine(t, c[0], c[1]); }, "Nothing due in this window.") } : null,
+      on("finished") ? { html: listCard("Finished", P.label, finished, function (t) { return taskLine(t, fmt(t.dd), ""); }, "Nothing finished in this period.") } : null,
+    ], [4, 4, 4]);
 
-    if (D.notes) html += '<section class="card span-12">' + cardHead("", "Notes", "", false) + '<div class="notes">' + esc(D.notes) + "</div></section>";
+    if (on("notes") && D.notes) html += row([{ html: cardHead("", "Notes", "", false) + '<div class="notes">' + esc(D.notes) + "</div>" }], [12]);
 
     // explorer
-    html += '<section class="card span-12 explorer" id="explorer">' + cardHead("", "All tasks", "Search, sort by any column, hover a row for details", false) + '<div id="explorer-body"></div></section>';
+    if (on("tasks")) html += row([{ cls: "explorer", id: "explorer", html: cardHead("", "All tasks", "Search, sort by any column, hover a row for details", false) + '<div id="explorer-body"></div>' }], [12]);
     html += "</div>"; // grid
     html += '<p class="foot">Snapshot made ' + esc(new Date(D.generated).toLocaleString()) + " from " + esc(D.app) + ". The numbers don't update — export again for fresh data.</p>";
     html += "</div>";
@@ -437,7 +477,7 @@
     // charts after layout
     var cp = document.getElementById("c-prog"); if (cp) drawProgress(cp, F);
     var cw = document.getElementById("c-weeks"); if (cw) drawWeeks(cw, F);
-    renderExplorer(F);
+    if (on("tasks")) renderExplorer(F);
     bindTips(app);
     wire();
   }

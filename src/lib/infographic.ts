@@ -31,8 +31,31 @@ export interface InfoTask {
   sl: number | null; // finish slip vs baseline (days)
 }
 
+// Sections the person exporting can include or leave out.
+export type InfoSection =
+  | "health" | "tiles" | "state" | "modules" | "progress" | "weekly" | "people"
+  | "goals" | "baseline" | "attention" | "upcoming" | "finished" | "notes" | "tasks";
+
+export const INFO_SECTIONS: { key: InfoSection; label: string; hint: string }[] = [
+  { key: "health", label: "Status", hint: "On track / at risk, with the reason" },
+  { key: "tiles", label: "Number tiles", hint: "Tasks, % complete, finished, late, hours" },
+  { key: "state", label: "Where the work stands", hint: "Tasks by state" },
+  { key: "modules", label: "By module", hint: "Progress per module" },
+  { key: "progress", label: "Progress over time", hint: "Finished vs planned" },
+  { key: "weekly", label: "Weekly output", hint: "Tasks finished per week" },
+  { key: "people", label: "By person", hint: "Done / assigned and hours per person" },
+  { key: "goals", label: "Goals", hint: "Goal progress and target dates" },
+  { key: "baseline", label: "Against the baseline", hint: "Slip vs the saved plan" },
+  { key: "attention", label: "Needs attention", hint: "Late or blocked tasks" },
+  { key: "upcoming", label: "Coming up", hint: "Tasks due soon" },
+  { key: "finished", label: "Finished", hint: "Tasks finished in the period" },
+  { key: "notes", label: "Notes", hint: "Your weekly notes" },
+  { key: "tasks", label: "All tasks table", hint: "Searchable, sortable list of every task" },
+];
+
 export interface InfoData {
   v: 1;
+  sections: InfoSection[]; // what to show (in the file's fixed order)
   app: string;
   title: string;
   icon: string;
@@ -71,6 +94,7 @@ export function buildInfographicData(opts: {
   goals: GoalStatus[];
   baseline: BaselineSummary | null;
   notes?: string;
+  sections?: InfoSection[];
 }): InfoData {
   const { rows, today } = opts;
   const byProject = new Map(opts.projects.map((p) => [p.id, p]));
@@ -100,6 +124,7 @@ export function buildInfographicData(opts: {
   });
   return {
     v: 1,
+    sections: opts.sections && opts.sections.length ? opts.sections : INFO_SECTIONS.map((s) => s.key),
     app: opts.app,
     title: opts.title,
     icon: opts.icon,
