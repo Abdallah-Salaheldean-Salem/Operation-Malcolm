@@ -2,12 +2,13 @@ import { Project, Task } from "../types";
 import { isCompletionColumn } from "./recurrence";
 import { nameKey, sameName } from "./identity";
 import { watcherNames } from "./notifications";
+import { findMentions } from "./mentions";
 
 // ---- Change events (Phase 2) -------------------------------------------------
 // When this device pushes an edited space, compare it with the last synced copy
 // and address a notification to each affected member (never to the actor).
 
-export type EventKind = "assigned" | "completed" | "comment" | "due-changed";
+export type EventKind = "assigned" | "completed" | "comment" | "due-changed" | "mention";
 
 export interface NewNotification {
   recipient: string; // nameKey() of the member
@@ -40,6 +41,10 @@ export function diffTaskEvents(
   const colOf = (p: Project, t: Task) => p.columns.find((c) => c.id === t.status);
   const out: NewNotification[] = [];
   const assigned = new Map<string, { name: string; tasks: Task[] }>();
+  // Anyone who can be @mentioned: the space's members and anyone with a task.
+  const people = [...(after.members || []).map((m) => m.name), ...after.tasks.map((t) => t.assignee)].filter(
+    (n): n is string => !!n
+  );
 
   const add = (name: string | undefined, t: Task | null, kind: EventKind, message: string, detail: string, title?: string) => {
     if (!name || name === "Unassigned" || sameName(name, actor)) return;
@@ -76,8 +81,10 @@ export function diffTaskEvents(
     const oldComments = new Set((prev.comments || []).map((c) => c.id));
     for (const c of t.comments || []) {
       if (oldComments.has(c.id)) continue;
+      const mentioned = findMentions(c.text || "", people).filter((m) => !sameName(m, c.author));
+      mentioned.forEach((m) => add(m, t, "mention", `${c.author || who} mentioned you: “${clip(c.text, 90)}”`, c.id));
       watchers
-        .filter((w) => !sameName(w, c.author))
+        .filter((w) => !sameName(w, c.author) && !mentioned.some((m) => sameName(m, w))) // mentioned people get the mention instead
         .forEach((w) => add(w, t, "comment", `${c.author || who} commented: “${clip(c.text, 90)}”`, c.id));
     }
 

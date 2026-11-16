@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import DateInput from "./DateInput";
 import TimerButton from "./TimerButton";
+import { MentionInput, MentionText } from "./MentionInput";
 import { Task, BoardColumn, TaskPriority, SubTask, ChecklistTemplate, ConstraintType, RecurrenceFrequency, ProjectModule } from "../types";
 import { PRIORITIES } from "../data";
 import { checkDoneGate } from "../lib/checklist";
@@ -286,6 +287,11 @@ export default function TaskModal({
     setTemplateNameInput("");
     setShowSaveTemplate(false);
   };
+
+  // People who can be @mentioned: the space's members plus anyone with a task.
+  const mentionNames = Array.from(
+    new Set([...projectMembers, ...allTasks.map((t) => t.assignee)].filter((n): n is string => !!n && n !== "Unassigned"))
+  );
 
   // Comments actions
   const handleAddComment = () => {
@@ -640,26 +646,23 @@ export default function TaskModal({
                           <span>{com.author}</span>
                           <span className="font-mono text-[10px]">{com.date}</span>
                         </div>
-                        <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{com.text}</p>
+                        <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap break-words">
+                          <MentionText text={com.text} names={mentionNames} me={currentUser} />
+                        </p>
                       </div>
                     ))
                   )}
                 </div>
 
                 <div className="flex space-x-2">
-                  <input
+                  <MentionInput
                     id="new-comment-input"
-                    type="text"
-                    placeholder="Write a comment..."
+                    placeholder="Write a comment… type @ to mention someone"
                     value={newCommentText}
-                    onChange={(e) => setNewCommentText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddComment();
-                      }
-                    }}
-                    className="flex-1 border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    onChange={setNewCommentText}
+                    onSubmit={handleAddComment}
+                    names={mentionNames}
+                    className="border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-1.5 text-xs text-slate-700 dark:text-slate-300 bg-white dark:bg-[#14171C] focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   />
                   <button
                     id="add-comment-btn"

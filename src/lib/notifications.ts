@@ -39,7 +39,7 @@ export const DUE_SOON_DAYS = 2;
 
 export type AlertKind =
   | "overdue" | "due-today" | "due-soon" | "deadline-passed" | "deadline-soon" | "starts-today" // date reminders
-  | "assigned" | "completed" | "comment" | "due-changed"; // change events from teammates
+  | "assigned" | "completed" | "comment" | "due-changed" | "mention"; // change events from teammates
 export type AlertSeverity = "danger" | "warn" | "info" | "event";
 
 export interface TaskAlert {

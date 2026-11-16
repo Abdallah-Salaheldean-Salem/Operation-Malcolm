@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { Project, Task, TaskComment } from "../types";
-import { MessageSquare, Search, ArrowUpRight } from "lucide-react";
+import { MessageSquare, Search, ArrowUpRight, AtSign } from "lucide-react";
+import { MentionText } from "./MentionInput";
+import { findMentions } from "../lib/mentions";
+import { loadMe, sameName } from "../lib/identity";
 
 interface CommentsViewProps {
   project: Project;
@@ -33,6 +36,16 @@ const avatarColor = (name: string) =>
 export default function CommentsView({ project, tasks, onOpenTask }: CommentsViewProps) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortMode>("recent");
+  const [mineOnly, setMineOnly] = useState(false);
+  const me = useMemo(() => loadMe(), []);
+  const names = useMemo(
+    () =>
+      Array.from(
+        new Set([...(project.members || []).map((m) => m.name), ...project.tasks.map((t) => t.assignee)].filter((n): n is string => !!n && n !== "Unassigned"))
+      ),
+    [project.members, project.tasks]
+  );
+  const mentionsMe = (c: TaskComment) => !!me && findMentions(c.text || "", names).some((n) => sameName(n, me));
 
   const columnOf = (id: string) => project.columns.find((c) => c.id === id);
   const columnIndex = (id: string) => project.columns.findIndex((c) => c.id === id);
@@ -43,11 +56,12 @@ export default function CommentsView({ project, tasks, onOpenTask }: CommentsVie
       .filter((t) => (t.comments || []).length > 0)
       .map((t) => {
         const all = [...(t.comments || [])].sort((a, b) => commentTime(a) - commentTime(b));
-        const shown = q
+        const searched = q
           ? t.title.toLowerCase().includes(q)
             ? all
             : all.filter((c) => c.text.toLowerCase().includes(q) || (c.author || "").toLowerCase().includes(q))
           : all;
+        const shown = mineOnly ? searched.filter(mentionsMe) : searched;
         return { task: t, comments: shown, total: all.length, latest: Math.max(...all.map(commentTime)) };
       })
       .filter((th) => th.comments.length > 0);
@@ -55,7 +69,7 @@ export default function CommentsView({ project, tasks, onOpenTask }: CommentsVie
       ? list.sort((a, b) => b.latest - a.latest)
       : list.sort((a, b) => columnIndex(a.task.status) - columnIndex(b.task.status));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks, query, sort, project.columns]);
+  }, [tasks, query, sort, project.columns, mineOnly, names, me]);
 
   const commentCount = threads.reduce((n, th) => n + th.comments.length, 0);
   const anyComments = tasks.some((t) => (t.comments || []).length > 0);
@@ -76,6 +90,22 @@ export default function CommentsView({ project, tasks, onOpenTask }: CommentsVie
             className="w-56 max-w-full bg-slate-50 dark:bg-[#14171C] border border-slate-200 dark:border-[#1E222B] rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+        {me && (
+          <button
+            id="comments-mentions-me"
+            type="button"
+            onClick={() => setMineOnly((v) => !v)}
+            aria-pressed={mineOnly}
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${
+              mineOnly
+                ? "bg-indigo-600 border-indigo-600 text-white"
+                : "bg-slate-50 dark:bg-[#14171C] border-slate-200 dark:border-[#1E222B] text-slate-700 dark:text-slate-300 hover:border-indigo-400"
+            }`}
+            title={`Only comments that mention @${me}`}
+          >
+            <AtSign className="w-3.5 h-3.5" /> Mentions me
+          </button>
+        )}
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortMode)}
@@ -89,7 +119,7 @@ export default function CommentsView({ project, tasks, onOpenTask }: CommentsVie
       {threads.length === 0 ? (
         <div className="text-center py-20 text-slate-500 text-sm">
           <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-40" />
-          {anyComments ? "No comments match your search." : "No comments yet. Open a task and add a comment — it will show up here."}
+          {mineOnly ? "No comments mention you." : anyComments ? "No comments match your search." :"No comments yet. Open a task and add a comment — it will show up here."}
         </div>
       ) : (
         <div className="space-y-3">
@@ -135,7 +165,9 @@ export default function CommentsView({ project, tasks, onOpenTask }: CommentsVie
                             <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{author}</span>
                             <span className="text-[10px] text-slate-400">{formatDate(c)}</span>
                           </div>
-                          <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words mt-0.5">{c.text}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap break-words mt-0.5">
+                            <MentionText text={c.text} names={names} me={me} />
+                          </p>
                         </div>
                       </li>
                     );
