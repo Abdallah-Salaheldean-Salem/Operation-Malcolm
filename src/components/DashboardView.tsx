@@ -16,6 +16,7 @@ import {
   Hourglass,
   MoreHorizontal,
   Presentation,
+  Sparkles,
   UserX,
   X,
 } from "lucide-react";
@@ -57,6 +58,7 @@ import { fetchAppState } from "../lib/supabase-sync";
 import { weekBounds, weekLabel, weeklyReport, weeklyText } from "../lib/weekly";
 import { GOAL_STATE_LABEL, goalStatus } from "../lib/modules";
 import { baselineSummary, fmtSlip, variance } from "../lib/baseline";
+import { buildInfographicData, buildInfographicHtml, infographicFileName } from "../lib/infographic";
 import { ChartCard, LoadHeatmap, MeterList, ProgressChart, SegmentedBar, StatTile, TableData, WeekColumns } from "./dashboard/charts";
 
 interface DashboardViewProps {
@@ -342,6 +344,38 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
       setToast("Sorry — the Excel export failed.");
     } finally {
       setExportingXlsx(false);
+    }
+  };
+
+  // ---- interactive infographic (standalone HTML file) -------------------------
+  const exportInfographic = () => {
+    try {
+      const data = buildInfographicData({
+        app: (typeof document !== "undefined" && document.title) || "Task tracker",
+        title: scopeName,
+        icon: effScope === "space" ? activeProject.icon || "" : "",
+        rows: allRows, // every person: the file has its own Person filter
+        projects: scoped,
+        today,
+        period,
+        person: person || null,
+        goals,
+        baseline: effScope === "space" ? baselineSummary({ ...activeProject, tasks: allRows.map((r) => r.task) }, today) : null,
+        notes: mode === "weekly" ? notes : "",
+      });
+      const html = buildInfographicHtml(data);
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = infographicFileName(scopeName, today);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setToast("Infographic downloaded — open it in any browser, or send it to your manager.");
+    } catch (err) {
+      console.error("Infographic export failed", err);
+      setToast("Sorry — the infographic export failed.");
     }
   };
 
@@ -1243,6 +1277,15 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]"
             >
               <Presentation className="w-3.5 h-3.5" /> Present
+            </button>
+            <button
+              type="button"
+              id="dash-infographic"
+              onClick={exportInfographic}
+              title="Download an interactive infographic (.html) that opens in any browser"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Infographic</span><span className="sm:hidden">HTML</span>
             </button>
             <button
               type="button"
