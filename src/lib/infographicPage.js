@@ -26,6 +26,7 @@
     sort: { key: "d", dir: 1 },
     showAll: false,
     tables: {},
+    day: null, // Day replay: selected day
   };
 
   // ---- helpers ------------------------------------------------------------
@@ -81,6 +82,9 @@
 
   // ---- data ----------------------------------------------------------------
   var ALL = D.tasks;
+  ALL.forEach(function (t, i) { t._i = i; });
+  var ITEMS = D.items || [];
+  var LOGS = D.logs || [];
   var PEOPLE = uniq(ALL.map(function (t) { return t.a; })).sort(function (a, b) {
     return (a === "Unassigned") - (b === "Unassigned") || a.localeCompare(b);
   });
@@ -292,6 +296,8 @@
   // ---- render --------------------------------------------------------------
   function render() {
     hideTip();
+    stopPlay();
+    state.day = null; // filters changed: show the latest active day again
     var F = filtered();
     var P = period();
     var from = P.days ? addDays(TODAY, -(P.days - 1)) : null;
@@ -430,6 +436,11 @@
     }
     html += row([weekCard, pplCard], [7, 5]);
 
+    // day replay
+    if (on("replay")) {
+      html += row([{ id: "replay", html: cardHead("replay", "Day replay", "Each square is a day, darker = more done · tap a square to see that day, or press Play", true) + '<div id="replay-body"></div>' }], [12]);
+    }
+
     // goals + baseline
     var goalsCard = null;
     if (on("goals") && D.goals.length) {
@@ -478,8 +489,184 @@
     var cp = document.getElementById("c-prog"); if (cp) drawProgress(cp, F);
     var cw = document.getElementById("c-weeks"); if (cw) drawWeeks(cw, F);
     if (on("tasks")) renderExplorer(F);
+    if (on("replay")) renderReplay(F);
     bindTips(app);
     wire();
+  }
+
+  // ---- day replay -----------------------------------------------------------
+  var playTimer = 0;
+  function stopPlay() { clearInterval(playTimer); playTimer = 0; }
+  var DAYNAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  function dayName(iso) { return DAYNAMES[new Date(toDay(iso) * 864e5).getUTCDay()]; }
+
+  // What happened each day, for the tasks that pass the filters. Work logged by
+  // someone counts for that person (whoever owns the task).
+  function dayActivity(F) {
+    var inF = {}; F.forEach(function (t) { inF[t._i] = 1; });
+    var scopeOK = function (t) { return (!state.space || t.s === state.space) && (!state.module || (state.module === "__none__" ? !t.m : t.m === state.module)); };
+    var days = {};
+    var get = function (d) { return days[d] || (days[d] = { fin: [], items: [], logs: [], hours: 0 }); };
+    F.forEach(function (t) { if (t.dd && t.dd <= TODAY) get(t.dd).fin.push(t); });
+    ITEMS.forEach(function (it) { if (inF[it.ti]) get(it.d).items.push(it); });
+    LOGS.forEach(function (l) {
+      var t = ALL[l.ti];
+      if (!t || !scopeOK(t) || (state.person && !sameName(l.p, state.person))) return;
+      var day = get(l.d); day.logs.push(l); day.hours += l.h;
+    });
+    return days;
+  }
+  function score(a) { return a ? a.fin.length + a.items.length : 0; }
+
+  function renderReplay(F) {
+    var body = document.getElementById("replay-body");
+    if (!body) return;
+    var A = dayActivity(F);
+    var active = Object.keys(A).filter(function (d) { return A[d].fin.length || A[d].items.length || A[d].logs.length; }).sort();
+    if (!active.length) { body.innerHTML = '<p class="empty">Nothing was finished, ticked or logged for these filters yet.</p>'; return; }
+
+    // Range: as many weeks as fit, but not before the first active week.
+    var CELL = 14, GAP = 3, LEFT = 30, TOP = 18;
+    var width = Math.max(260, body.clientWidth || 600);
+    var fit = Math.max(4, Math.min(53, Math.floor((width - LEFT) / (CELL + GAP))));
+    var lastWeek = weekStart(TODAY);
+    var firstWeek = weekStart(active[0]);
+    var weeks = Math.min(fit, Math.floor(diffDays(firstWeek, lastWeek) / 7) + 1);
+    weeks = Math.max(weeks, Math.min(fit, 8));
+    var start = addDays(lastWeek, -7 * (weeks - 1));
+    // Few weeks to show: let the squares grow (up to 24px) to use the space.
+    CELL = Math.max(12, Math.min(24, Math.floor((width - LEFT) / weeks) - GAP));
+    var shown = active.filter(function (d) { return d >= start; });
+    if (!state.day || state.day < start || state.day > TODAY) state.day = shown.length ? shown[shown.length - 1] : TODAY;
+
+    var maxScore = Math.max(1, Math.max.apply(null, shown.map(function (d) { return score(A[d]); })));
+    var level = function (a) {
+      var s = score(a);
+      if (!s) return a && a.logs.length ? 1 : 0; // only time logged: lightest step
+      return Math.max(1, Math.min(4, Math.ceil((s / maxScore) * 4)));
+    };
+    var FILL = ["var(--grid)", "color-mix(in srgb, var(--accent) 28%, var(--surface))", "color-mix(in srgb, var(--accent) 52%, var(--surface))", "color-mix(in srgb, var(--accent) 76%, var(--surface))", "var(--accent)"];
+
+    if (state.tables.replay) {
+      body.innerHTML = table(["Day", "Tasks finished", "Items ticked", "Hours logged"], shown.slice().reverse().map(function (d) {
+        return [dayName(d).slice(0, 3) + " " + fmtLong(d), A[d].fin.length, A[d].items.length, r1(A[d].hours)];
+      }), [0, 1, 1, 1]) + dayCard(A, shown);
+      wireDayCard(F, shown);
+      return;
+    }
+
+    var W = LEFT + weeks * (CELL + GAP), H = TOP + 7 * (CELL + GAP);
+    var g = "";
+    ["Mon", "Wed", "Fri"].forEach(function (lab, i) {
+      var r = [1, 3, 5][i];
+      g += '<text x="0" y="' + (TOP + r * (CELL + GAP) + CELL - 3) + '">' + lab + "</text>";
+    });
+    var lastMonth = "", lastLabelAt = -99;
+    for (var w = 0; w < weeks; w++) {
+      var ws = addDays(start, 7 * w);
+      var mon = ws.slice(0, 7);
+      if (mon !== lastMonth) {
+        // Label the month where it starts, unless that would crowd the previous label.
+        var x0 = LEFT + w * (CELL + GAP);
+        // The first column only gets a label if its month lasts a few weeks.
+        var shortFirst = w === 0 && addDays(ws, 14).slice(0, 7) !== mon;
+        if (!shortFirst && x0 - lastLabelAt >= 30) {
+          g += '<text x="' + x0 + '" y="11">' + MON[+ws.slice(5, 7) - 1] + "</text>";
+          lastLabelAt = x0;
+        }
+        lastMonth = mon;
+      }
+      for (var dIdx = 0; dIdx < 7; dIdx++) {
+        var d = addDays(ws, dIdx);
+        if (d > TODAY) continue;
+        var a = A[d], lv = level(a);
+        var x = LEFT + w * (CELL + GAP), y = TOP + dIdx * (CELL + GAP);
+        var label = fmtLong(d) + ": " + (a ? plural(a.fin.length, "task") + " finished, " + plural(a.items.length, "item") + " ticked" + (a.hours ? ", " + r1(a.hours) + "h logged" : "") : "nothing recorded");
+        var tipHtml = "<b>" + dayName(d).slice(0, 3) + " " + fmt(d) + "</b><br>" + (a ? plural(a.fin.length, "task") + " finished · " + plural(a.items.length, "item") + " ticked" + (a.hours ? "<br>" + r1(a.hours) + "h logged" : "") : "Nothing recorded") + "<br><i>Tap to open</i>";
+        g += '<rect class="day" data-day="' + d + '" tabindex="' + (d === state.day ? 0 : -1) + '" role="button" aria-pressed="' + (d === state.day) + '" aria-label="' + esc(label) + '" data-tip="' + esc(tipHtml) + '" x="' + x + '" y="' + y + '" width="' + CELL + '" height="' + CELL + '" rx="3" fill="' + FILL[lv] + '"' +
+          (d === state.day ? ' stroke="var(--ink)" stroke-width="2"' : d === TODAY ? ' stroke="var(--axis)" stroke-width="1"' : "") + "/>";
+      }
+    }
+    var svg = '<div class="scroll"><svg class="heat" viewBox="0 0 ' + W + " " + H + '" width="' + W + '" height="' + H + '" role="group" aria-label="Days with work done">' + g + "</svg></div>";
+    var leg = '<div class="legend heat-legend"><span>Less</span>' + FILL.map(function (f) { return '<i style="background:' + f + '"></i>'; }).join("") + "<span>More</span><span class=\"muted\">" +
+      plural(shown.length, "active day") + " · " + plural(shown.reduce(function (s, d) { return s + A[d].fin.length; }, 0), "task") + " finished</span></div>";
+    body.innerHTML = svg + leg + dayCard(A, shown);
+    bindTips(body);
+    body.querySelectorAll("rect.day").forEach(function (r) {
+      r.addEventListener("click", function () { stopPlay(); selectDay(F, r.getAttribute("data-day"), false); });
+      r.addEventListener("keydown", function (e) {
+        var step = { ArrowLeft: -7, ArrowRight: 7, ArrowUp: -1, ArrowDown: 1 }[e.key];
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectDay(F, r.getAttribute("data-day"), true); }
+        else if (step) {
+          e.preventDefault();
+          var nd = addDays(r.getAttribute("data-day"), step);
+          if (nd >= start && nd <= TODAY) selectDay(F, nd, true);
+        }
+      });
+    });
+    wireDayCard(F, shown);
+  }
+
+  function selectDay(F, d, keepFocus) {
+    state.day = d;
+    hideTip();
+    renderReplay(F);
+    if (keepFocus) {
+      var el = document.querySelector('#replay-body rect.day[data-day="' + d + '"]');
+      if (el) el.focus();
+    }
+  }
+
+  function dayCard(A, shown) {
+    var d = state.day, a = A[d] || { fin: [], items: [], logs: [], hours: 0 };
+    var idx = shown.indexOf(d);
+    var prev = shown.filter(function (x) { return x < d; }).pop(), next = shown.filter(function (x) { return x > d; })[0];
+    var h = '<div class="daycard" id="daycard" aria-live="polite"><div class="daycard-head"><div><b>' + dayName(d) + ", " + fmtLong(d) + "</b>" +
+      '<small>' + (a.fin.length || a.items.length || a.logs.length
+        ? [a.fin.length ? plural(a.fin.length, "task") + " finished" : "", a.items.length ? plural(a.items.length, "item") + " ticked" : "", a.hours ? r1(a.hours) + "h logged" : ""].filter(Boolean).join(" · ")
+        : "Nothing recorded on this day") + (idx >= 0 ? " · active day " + (idx + 1) + " of " + shown.length : "") + "</small></div>" +
+      '<div class="daycard-nav"><button class="btn" id="day-prev"' + (prev ? "" : " disabled") + ' aria-label="Previous active day">◀</button>' +
+      '<button class="btn" id="day-play" aria-pressed="' + !!playTimer + '">' + (playTimer ? "❚❚ Pause" : "▶ Play") + "</button>" +
+      '<button class="btn" id="day-next"' + (next ? "" : " disabled") + ' aria-label="Next active day">▶</button></div></div>';
+    if (a.fin.length) {
+      h += '<h3>Tasks finished</h3><ul class="list">' + a.fin.map(function (t) { return taskLine(t, t.st || "Done", ""); }).join("") + "</ul>";
+    }
+    if (a.items.length) {
+      h += '<h3>Checklist items ticked</h3><ul class="list">' + a.items.map(function (it) {
+        var t = ALL[it.ti];
+        return '<li><span class="dot" style="background:var(--done)"></span><span class="main"><b>✓ ' + esc(it.i) + "</b><small>" + esc(it.k + " · " + t.t + " · " + t.a) + "</small></span></li>";
+      }).join("") + "</ul>";
+    }
+    if (a.logs.length) {
+      h += '<h3>Work logged</h3><ul class="list">' + a.logs.map(function (l) {
+        var t = ALL[l.ti];
+        return '<li><span class="dot" style="background:var(--accent)"></span><span class="main"><b>' + esc(t.t) + "</b><small>" + esc(l.p + (l.n ? " · " + l.n : "")) + '</small></span><span class="chip">' + r1(l.h) + "h</span></li>";
+      }).join("") + "</ul>";
+    }
+    return h + "</div>";
+  }
+
+  function wireDayCard(F, shown) {
+    var go = function (d) { if (d) selectDay(F, d, false); };
+    var prev = document.getElementById("day-prev"), next = document.getElementById("day-next"), play = document.getElementById("day-play");
+    if (prev) prev.addEventListener("click", function () { stopPlay(); go(shown.filter(function (x) { return x < state.day; }).pop()); });
+    if (next) next.addEventListener("click", function () { stopPlay(); go(shown.filter(function (x) { return x > state.day; })[0]); });
+    if (play) play.addEventListener("click", function () {
+      if (playTimer) { stopPlay(); renderReplay(F); return; }
+      // Start from the first active day unless we're part-way through.
+      var list = shown.slice();
+      // Play from the day on screen (or from the start if it's the last one).
+      var at = list.indexOf(state.day);
+      at = at < 0 || at === list.length - 1 ? -1 : at - 1;
+      var stepFn = function () {
+        at++;
+        if (at >= list.length) { stopPlay(); renderReplay(F); return; }
+        state.day = list[at];
+        renderReplay(F);
+      };
+      playTimer = setInterval(stepFn, 1200);
+      stepFn();
+    });
   }
 
   function renderExplorer(F) {
@@ -587,6 +774,7 @@
       var F = filtered();
       var cp = document.getElementById("c-prog"); if (cp) drawProgress(cp, F);
       var cw = document.getElementById("c-weeks"); if (cw) drawWeeks(cw, F);
+      if (on("replay")) renderReplay(F);
     }, 120);
   });
   window.addEventListener("beforeprint", function () {

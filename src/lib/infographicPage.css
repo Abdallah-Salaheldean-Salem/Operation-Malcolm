@@ -219,6 +219,24 @@ td.n, th.n { text-align: right; }
 .status { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .status i { width: 8px; height: 8px; border-radius: 50%; }
 
+/* day replay */
+svg.heat { display: block; overflow: visible; }
+svg.heat text { fill: var(--muted); font-size: 10px; }
+svg.heat rect.day { cursor: pointer; outline: none; }
+svg.heat rect.day:hover { stroke: var(--ink-2); stroke-width: 1; }
+svg.heat rect.day:focus-visible { stroke: var(--focus); stroke-width: 2; }
+.heat-legend { align-items: center; }
+.heat-legend i { width: 12px; height: 12px; border-radius: 3px; }
+.heat-legend .muted { color: var(--muted); margin-left: 8px; }
+.daycard { margin-top: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.daycard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.daycard-head b { display: block; font-size: 15px; }
+.daycard-head small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.daycard-nav { margin-left: auto; display: flex; gap: 6px; }
+.daycard-nav .btn { padding: 5px 10px; }
+.daycard-nav .btn:disabled { opacity: .4; cursor: default; }
+.daycard h3 { margin: 12px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 700; }
+
 /* notes */
 .notes { white-space: pre-wrap; font-size: 13px; color: var(--ink-2); }
 
@@ -235,7 +253,7 @@ td.n, th.n { text-align: right; }
 
 @media print {
   :root { --bg: #ffffff; }
-  .filters, .head .tools, .card-head .btn, .explorer .tools { display: none !important; }
+  .filters, .head .tools, .card-head .btn, .explorer .tools, .daycard-nav { display: none !important; }
   .card, .tile, .health { break-inside: avoid; }
   .wrap { padding: 0; max-width: none; }
   @page { size: A4 landscape; margin: 12mm; }

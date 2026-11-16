@@ -3,6 +3,7 @@ import { assigneeOf, CAT_LABEL, PeriodKey, Row } from "./dashboard";
 import { isDeadlineMissed } from "./scheduling";
 import { moduleOfTask, GoalStatus, GOAL_STATE_LABEL } from "./modules";
 import { BaselineSummary, variance } from "./baseline";
+import { DailyLog } from "./dailyLogs";
 import pageScript from "./infographicPage.js?raw";
 import pageStyle from "./infographicPage.css?raw";
 
@@ -31,10 +32,26 @@ export interface InfoTask {
   sl: number | null; // finish slip vs baseline (days)
 }
 
+// Day replay: what happened on each day, linked to tasks by their index in
+// InfoData.tasks so the page's filters apply to it.
+export interface InfoItem {
+  d: string; // day ticked
+  i: string; // item title
+  k: "Checklist" | "Subtask";
+  ti: number; // task index
+}
+export interface InfoLog {
+  d: string; // day
+  ti: number; // task index
+  p: string; // who logged it
+  h: number; // hours
+  n: string; // note
+}
+
 // Sections the person exporting can include or leave out.
 export type InfoSection =
   | "health" | "tiles" | "state" | "modules" | "progress" | "weekly" | "people"
-  | "goals" | "baseline" | "attention" | "upcoming" | "finished" | "notes" | "tasks";
+  | "goals" | "baseline" | "attention" | "upcoming" | "finished" | "notes" | "tasks" | "replay";
 
 export const INFO_SECTIONS: { key: InfoSection; label: string; hint: string }[] = [
   { key: "health", label: "Status", hint: "On track / at risk, with the reason" },
@@ -43,6 +60,7 @@ export const INFO_SECTIONS: { key: InfoSection; label: string; hint: string }[] 
   { key: "modules", label: "By module", hint: "Progress per module" },
   { key: "progress", label: "Progress over time", hint: "Finished vs planned" },
   { key: "weekly", label: "Weekly output", hint: "Tasks finished per week" },
+  { key: "replay", label: "Day replay", hint: "A square per day — tap one to see what was done" },
   { key: "people", label: "By person", hint: "Done / assigned and hours per person" },
   { key: "goals", label: "Goals", hint: "Goal progress and target dates" },
   { key: "baseline", label: "Against the baseline", hint: "Slip vs the saved plan" },
@@ -66,6 +84,8 @@ export interface InfoData {
   person: string | null;
   catLabel: Record<string, string>;
   tasks: InfoTask[];
+  items: InfoItem[];
+  logs: InfoLog[];
   goals: {
     title: string;
     progress: number;
@@ -95,6 +115,7 @@ export function buildInfographicData(opts: {
   baseline: BaselineSummary | null;
   notes?: string;
   sections?: InfoSection[];
+  logs?: DailyLog[]; // Daily Logs entries (any space; only those for tasks in scope are kept)
 }): InfoData {
   const { rows, today } = opts;
   const byProject = new Map(opts.projects.map((p) => [p.id, p]));
@@ -122,6 +143,30 @@ export function buildInfographicData(opts: {
       sl: v ? v.finishSlip : null,
     };
   });
+  const isDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && v <= today;
+  const items: InfoItem[] = [];
+  rows.forEach((r, ti) => {
+    (["Checklist", "Subtask"] as const).forEach((k) => {
+      (k === "Checklist" ? r.task.checklist : r.task.subtasks)?.forEach((it) => {
+        if (it.completed && isDay(it.completedAt) && it.title) items.push({ d: it.completedAt, i: it.title, k, ti });
+      });
+    });
+  });
+  // Logs carry a task id but no space: match within the spaces in scope.
+  const indexById = new Map<string, number>();
+  rows.forEach((r, ti) => {
+    if (!indexById.has(r.task.id)) indexById.set(r.task.id, ti);
+  });
+  const logs: InfoLog[] = (opts.logs || [])
+    .filter((l) => isDay(l.date) && indexById.has(l.taskId))
+    .map((l) => ({
+      d: l.date,
+      ti: indexById.get(l.taskId)!,
+      p: (l.assignee || "").trim() || "Unassigned",
+      h: Math.round((Number(l.hours) || 0) * 100) / 100,
+      n: (l.description || "").slice(0, 280),
+    }));
+
   return {
     v: 1,
     sections: opts.sections && opts.sections.length ? opts.sections : INFO_SECTIONS.map((s) => s.key),
@@ -135,6 +180,8 @@ export function buildInfographicData(opts: {
     person: opts.person,
     catLabel: { ...CAT_LABEL },
     tasks,
+    items,
+    logs,
     goals: opts.goals.map((g) => ({
       title: g.goal.title || "Untitled goal",
       progress: g.progress,

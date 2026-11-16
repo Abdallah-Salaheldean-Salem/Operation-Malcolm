@@ -422,6 +422,7 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
         baseline: effScope === "space" ? baselineSummary({ ...activeProject, tasks: allRows.map((r) => r.task) }, today) : null,
         notes: mode === "weekly" ? notes : "",
         sections: infoChosen,
+        logs,
       });
       const html = buildInfographicHtml(data);
       const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
