@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertOctagon,
   AlertTriangle,
@@ -15,7 +14,6 @@ import {
   FileDown,
   Hourglass,
   MoreHorizontal,
-  Presentation,
   Sparkles,
   UserX,
   X,
@@ -133,8 +131,6 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
   const [showAllQueue, setShowAllQueue] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [presenting, setPresenting] = useState(false);
-  const [printQueued, setPrintQueued] = useState(false);
 
   // "Today" follows the clock (the tab may stay open overnight).
   const [today, setToday] = useState(() => localToday());
@@ -472,51 +468,6 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
     document.addEventListener("pointerdown", close);
     return () => document.removeEventListener("pointerdown", close);
   }, [menuFor]);
-
-  // ---- present / PDF --------------------------------------------------------------
-  const restoreRef = useRef<(() => void) | null>(null);
-  const endPrint = () => {
-    restoreRef.current?.();
-    restoreRef.current = null;
-  };
-  const startPrint = () => {
-    const html = document.documentElement;
-    const wasDark = html.classList.contains("dark");
-    const title = document.title;
-    html.classList.remove("dark"); // print on white
-    document.body.classList.add("dash-printing");
-    document.title = mode === "weekly" ? `${reportTitle} – weekly report ${W.start}` : `${scopeName} – status report ${today}`;
-    restoreRef.current = () => {
-      if (wasDark) html.classList.add("dark");
-      document.body.classList.remove("dash-printing");
-      document.title = title;
-      window.removeEventListener("afterprint", endPrint);
-    };
-    window.addEventListener("afterprint", endPrint);
-    // The page is restored on "afterprint" (or when leaving the presentation),
-    // never on a timer: on phones print() returns before the PDF is made.
-    window.setTimeout(() => window.print(), 250);
-  };
-  useEffect(() => {
-    if (presenting && printQueued) {
-      setPrintQueued(false);
-      startPrint();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presenting, printQueued]);
-  const exitPresent = () => {
-    endPrint();
-    setPresenting(false);
-    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-  };
-  useEffect(() => {
-    if (!presenting) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !document.fullscreenElement && exitPresent();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presenting]);
-  useEffect(() => () => endPrint(), []);
 
   // ---- small pieces -----------------------------------------------------------------
   const HealthIcon = S.health.level === "ok" ? CheckCircle2 : S.health.level === "risk" ? AlertTriangle : S.health.level === "off" ? AlertOctagon : CircleDashed;
@@ -1110,17 +1061,8 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
           />
         </div>
 
-        <ChartCard title="Notes for this report" subtitle={presenting ? undefined : "Highlights, blockers, decisions needed — included in the PDF, Excel and copied text"}>
-          {presenting ? (
-            notes.trim() ? (
-              <p className="text-sm text-slate-800 dark:text-slate-100 whitespace-pre-wrap leading-relaxed" data-testid="weekly-notes-view">
-                {notes.trim()}
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500 dark:text-slate-400">No notes this week.</p>
-            )
-          ) : (
-            <textarea
+        <ChartCard title="Notes for this report" subtitle="Highlights, blockers, decisions needed — included in the infographic, Excel and copied text">
+          <textarea
               id="weekly-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -1128,7 +1070,6 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
               placeholder="e.g. Simulation model validated. Waiting on lab access for the bench test — need a decision on the FPGA board by Thursday."
               className="w-full bg-slate-50 dark:bg-[#0F1115] border border-slate-200 dark:border-[#1E222B] rounded-lg px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
             />
-          )}
         </ChartCard>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -1302,17 +1243,7 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
         ))}
       </select>
       <div className="ml-auto flex items-center gap-2">
-        {presenting ? (
-          <>
-            <button type="button" onClick={startPrint} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]">
-              <FileDown className="w-3.5 h-3.5" /> Save as PDF
-            </button>
-            <button type="button" id="dash-exit-present" onClick={exitPresent} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold">
-              <X className="w-3.5 h-3.5" /> Exit
-            </button>
-          </>
-        ) : (
-          <>
+        <>
             {mode === "weekly" && (
               <>
                 <button type="button" id="weekly-copy" onClick={copySummary} title="Copy a text summary for email or chat" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]">
@@ -1328,17 +1259,6 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
                 </button>
               </>
             )}
-            <button
-              type="button"
-              id="dash-present"
-              onClick={() => {
-                setPresenting(true);
-                document.documentElement.requestFullscreen?.().catch(() => {});
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-[#1E222B] bg-white dark:bg-[#14171C] text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C2027]"
-            >
-              <Presentation className="w-3.5 h-3.5" /> Present
-            </button>
             <div className="relative" data-info-picker>
               <button
                 type="button"
@@ -1403,19 +1323,7 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              id="dash-pdf"
-              onClick={() => {
-                setPresenting(true);
-                setPrintQueued(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold"
-            >
-              <FileDown className="w-3.5 h-3.5" /> PDF
-            </button>
-          </>
-        )}
+        </>
       </div>
     </div>
   );
@@ -1434,29 +1342,6 @@ export default function DashboardView({ projects, activeProject, me, onUpdatePro
       {mode === "report" ? report() : mode === "plan" ? plan() : weekly()}
     </>
   );
-
-  if (presenting) {
-    return createPortal(
-      <div id="dash-present-layer" className="viz-root fixed inset-0 z-[45] overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-4 md:p-8">
-        <div className="max-w-[1500px] mx-auto space-y-3">
-          <div className="flex items-end justify-between gap-4 pb-1">
-            <div className="min-w-0">
-              <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight truncate">
-                {effScope === "space" && activeProject.icon ? `${activeProject.icon} ` : ""}
-                {scopeName}
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {mode === "report" ? `Status report · ${pInfo.label}` : mode === "plan" ? "Planning view" : `Weekly report · ${weekLabel(W.start)}${W.current ? " (so far)" : ""}`}
-                {person ? ` · ${person}` : ""} · {fmtLongDay(today)}
-              </p>
-            </div>
-          </div>
-          {body}
-        </div>
-      </div>,
-      document.body
-    );
-  }
 
   return (
     <div id="dashboard-view-root" className="viz-root h-full overflow-y-auto bg-slate-50 dark:bg-[#0F1115] p-3 md:p-6">

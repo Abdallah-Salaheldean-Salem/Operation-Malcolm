@@ -257,31 +257,3 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   font-family: inherit;
 }
 
-/* Presenting / saving the dashboard as a PDF: print only the presentation layer. */
-@media print {
-  body.dash-printing {
-    background: #ffffff !important;
-  }
-  body.dash-printing #root {
-    display: none !important;
-  }
-  body.dash-printing #dash-present-layer {
-    position: static !important;
-    inset: auto !important;
-    height: auto !important;
-    overflow: visible !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-  }
-  body.dash-printing .no-print {
-    display: none !important;
-  }
-  body.dash-printing .viz-card {
-    break-inside: avoid;
-    box-shadow: none !important;
-  }
-  @page {
-    size: A4 landscape;
-    margin: 10mm;
-  }
-}
